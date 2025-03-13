@@ -1,0 +1,920 @@
+---
+title: "ssf_thesis"
+author: "Una Adamoviča"
+date: "2025-03-05"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = FALSE, include = FALSE)
+library(suncalc)
+library(chron)
+
+library(sf)
+library(terra)
+library(tidyverse)
+library(lubridate)
+library(corrplot)
+
+library(amt)
+library(lme4)
+
+```
+
+
+
+```{r adding time period of crossing location}
+
+time <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\crossing_time\\intersections_distance.csv")
+
+# make conversions to do operations
+time <- time %>%
+  mutate(
+    start_h = chron(times = start_h),
+    end_h = chron(times = end_h),
+    d_start = as.Date(d_start, format = "%Y/%m/%d")
+  )
+
+# find the time of crossing through linear interpolation 
+time$interpolated_time <- time$start_h + 
+  (time$distance_to_start / time$distance_of_track) * (time$end_h - time$start_h)
+
+final <- left_join(time, sunlight, join_by("d_start" == "date") , relationship = "many-to-many", multiple = "first")
+
+
+#need to check the coordinates more precisely
+sunlight <- getSunlightTimes(date = final$d_start, lon = 25.45, lat = 59.05, 
+                             keep = c("sunriseEnd", "sunset", "night", "nightEnd"),
+                             tz = "Europe/Tallinn" )
+
+# get the light times
+sun_times <- c("sunriseEnd", "sunset", "night", "nightEnd")
+final[sun_times] <- lapply(final[sun_times], function(x) chron(times = format(x, format = "%H:%M:%S")))
+
+
+final <- final %>%
+  mutate(
+    time_category = case_when(
+      interpolated_time >= sunriseEnd & interpolated_time < sunset  ~ "Day",
+      interpolated_time >= night | interpolated_time < nightEnd  ~ "Night",
+      .default = "Twilight"
+      ),
+    crossing_time = lubridate::hms(interpolated_time)
+  )
+
+
+head(final, 5)
+```
+
+```{r workflow}
+
+### collect covariates
+# distance to road per class
+# land cover: different forest types, open, anthropogenic, water, new forest
+# time of day:distance_to_road and time:crossing(y/n)
+# season - after decding which models, then build for 3 seasons?
+# -- perhaps -- make also the angle analysis = avoidance, attraction, corridor
+
+### remove biased data potentially due to capture stress ??
+
+
+
+
+```
+
+
+
+```{r preperation of moose data, echo=TRUE}
+
+moose <- read.csv("moose_df.csv")
+
+# clean and make tracks 
+moose <- moose %>% 
+  mutate(timestamp = as.POSIXct(as.character(timestamp),  format = "%Y-%m-%d %H:%M:%S")) %>%
+  filter(!is.na(timestamp)) %>% 
+  make_track(UTM.Easting, UTM.Northing, timestamp, crs = 3301, id = id)
+
+head(moose, 5)
+summarize_sampling_rate_many(moose, "id")
+
+# make manipulations of moose data
+moose_sf <- st_as_sf(moose, coords = c("x_", "y_"), crs = 3301) 
+
+# create lines
+moose_lines <- moose_sf %>%
+  group_by(id) %>%
+  summarize(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+plot(moose_lines)
+
+# create study area to clip everyhting
+study_area <- moose_sf %>%
+  st_buffer(dist = 1823) %>%
+  st_union() %>%
+  st_as_sf()
+
+points_to_keep <- moose_sf %>%
+  group_by(id) %>%
+  mutate(
+    distance = as.numeric(st_distance(geometry, lead(geometry), by_element = TRUE)),
+    keep_point = !is.na(distance) & distance > 20
+  ) %>%
+  pull(keep_point)
+
+moose_filter <- moose[points_to_keep, ]
+
+# list-column to make it easy to apply functions to each animal data seperately 
+dat1 <- moose_filter %>% nest(data = -id)
+head(dat1,8)
+
+# resample to have everything consistent
+dat2 <- dat1 %>% 
+  mutate(dat.resample = map(data, ~ track_resample(., 
+                                                   rate = lubridate::minutes(30), 
+                                                   tolerance = lubridate::minutes(2)))) 
+
+```
+
+
+```{r collecting covariates}
+#layers
+
+new_forest <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_data\\Hansen_GFC-2022-v1.10_lossyear_60N_020E.tif")
+
+roads <- st_read("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\full-road-classes.gpkg")
+
+corine <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\rasters\\corine_30m_resample_mode.tif")
+
+#### 1. landuse
+# reclassify matrix to group landuse categories
+m <- matrix(c(0,22,1,
+              22,23, 2,
+              23, 24, 3,
+              24, 25, 4,
+              25, 41, 5), ncol = 3, byrow = TRUE)
+
+# 1 = human-modified = agriculture and anthropogenic
+# 2 = broad-leaved (deciduous)
+# 3 = coniferous
+# 4 = mixed
+# 5 = open areas -> combine with srub and peatbog and water
+# lowest excluded, maximum included
+
+landuse <- terra::classify(corine, m) %>%
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("landuse")
+
+#### 2. roads + distance
+# distance to roads code
+  # mutate(
+  #   nearest_major = st_distance(geometry,st_union(roads[roads$class>= 2, ])),
+  #   nearest_minor = st_distance(geometry, st_union(roads[roads$class== 1, ])),
+  #   nearest_local = st_distance(geometry, st_union(roads[roads$class == 0, ]))
+  # )
+
+major_roads_dist <- roads[roads$class >= 2,] %>%
+  rasterize(landuse) %>%
+  distance() %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("major_d")
+
+minor_roads_dist <- roads[roads$class == 1,] %>%
+  rasterize(landuse) %>%
+  distance() %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("minor_d")
+
+local_roads_dist <- roads[roads$class == 0,] %>%
+  rasterize(landuse) %>%
+  distance() %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("local_d")
+
+
+#### 3. new forest (forest loss)
+# reproject the layer, align the grids, and assign binary values to have new forest y/n
+new_forest <- new_forest %>% 
+  project(landuse) %>% 
+  resample(landuse, method = "near") %>% 
+  classify(matrix(c(0, 16, 1,
+                    16, 22, 0), ncol = 3, byrow = TRUE)) %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("new_forest")
+
+
+#### 4. time 
+
+
+
+```
+
+
+
+```{r 1 moose}
+test_moose <- dat2$dat.resample[[1]] %>% 
+  filter_min_n_burst(min_n = 3)
+
+steps <- test_moose %>%
+  steps_by_burst() %>%
+  random_steps(n_control = 10, 
+              sl_distr = fit_distr(.$sl_, "gamma"),
+              ta_distr = fit_distr(.$ta_, "vonmises"), 
+              include_observed = TRUE)
+#verify
+table(steps$case_)
+
+##### add lines later , doe not work
+# # STEP 2: Create lines for crossing detection
+# step_lines <- steps %>%
+#   steps_to_lines() %>%
+#   st_as_sf()
+
+# extrack raster covariates one by one
+steps2 <- steps %>% 
+  extract_covariates(landuse) %>% 
+  extract_covariates(new_forest) %>% 
+  extract_covariates(major_roads_dist) %>%
+  extract_covariates(minor_roads_dist) %>%
+  extract_covariates(local_roads_dist)
+
+###### add crossings later
+# 
+# steps_with_crossings <- steps_with_roads %>%
+#   mutate(
+#     crosses_major = lengths(st_intersects(step_lines, roads[roads$class >= 2, ])) > 0,
+#     crosses_minor = lengths(st_intersects(step_lines, roads[roads$class == 1, ])) > 0,
+#     crosses_local = lengths(st_intersects(step_lines, roads[roads$class == 0, ])) > 0
+#   )
+
+
+# time categories
+steps3 <- steps2 %>%
+  mutate(
+    time_of_day = chron(times = format(t1_, format = "%H:%M:%S")),
+    date = as.Date(t1_, format = "%Y/%m/%d")
+  ) 
+
+sunlight <- getSunlightTimes(
+  date = steps3$date,
+  lon = 25.45, 
+  lat = 59.05, 
+  keep = c("sunrise", "sunset", "dawn", "dusk"),
+  tz = "Europe/Tallinn"
+)
+
+steps3 <- steps3 %>%
+  left_join(sunlight, by = "date", relationship = "many-to-many", multiple = "first") %>%
+  mutate(
+    sunrise = chron(times = format(sunrise, format = "%H:%M:%S")),
+    sunset = chron(times = format(sunset, format = "%H:%M:%S")),
+    dawn = chron(times = format(dawn, format = "%H:%M:%S")),
+    dusk = chron(times = format(dusk, format = "%H:%M:%S")),
+    
+    time_category = case_when(
+      time_of_day >= sunrise & time_of_day < sunset ~ 1, # day
+      (time_of_day >= dawn & time_of_day < sunrise) | 
+        (time_of_day >= sunset & time_of_day < dusk) ~ 2, # twilight
+      TRUE ~ 3), #night
+    
+    month = lubridate::month(t1_, label = TRUE),
+    
+    season = case_when(
+      month %in% c("nov","dec", "janv", "febr") ~ 1, #winter
+      month %in% c("marts", "apr", "maijs") ~ 2, #spring
+      month %in% c("jūn", "jūl", "aug") ~ 3 #summer
+    )
+  ) %>%
+  select(-sunrise, -sunset, -dawn, -dusk, -lon, -lat)
+
+
+moose_lines <- moose_sf %>%
+  group_by(id) %>%
+  summarize(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+
+
+
+```
+
+```{r all moose}
+all_moose <- dat2$dat.resample %>%
+  bind_rows() %>%  # This combines all moose into one dataset
+  filter_min_n_burst(min_n = 3)
+
+steps <- all_moose %>%
+  steps_by_burst() %>%
+  random_steps(n_control = 10, 
+              sl_distr = fit_distr(.$sl_, "gamma"),
+              ta_distr = fit_distr(.$ta_, "vonmises"), 
+              include_observed = TRUE)
+
+steps2 <- steps %>% 
+  extract_covariates(landuse) %>% 
+  extract_covariates(new_forest) %>% 
+  extract_covariates(major_roads_dist) %>%
+  extract_covariates(minor_roads_dist) %>%
+  extract_covariates(local_roads_dist)
+
+
+#  time categories
+steps2 <- steps2 %>%
+  mutate(
+    time_of_day = chron(times = format(t1_, format = "%H:%M:%S")),
+    date = as.Date(t1_, format = "%Y/%m/%d")
+  ) 
+
+sunlight <- getSunlightTimes(
+  date = steps2$date,
+  lon = 25.45, 
+  lat = 59.05, 
+  keep = c("sunrise", "sunset", "dawn", "dusk"),
+  tz = "Europe/Tallinn"
+)
+
+steps3 <- steps2 %>%
+  left_join(sunlight, by = "date", relationship = "many-to-many", multiple = "first") %>%
+  mutate(
+    sunrise = chron(times = format(sunrise, format = "%H:%M:%S")),
+    sunset = chron(times = format(sunset, format = "%H:%M:%S")),
+    dawn = chron(times = format(dawn, format = "%H:%M:%S")),
+    dusk = chron(times = format(dusk, format = "%H:%M:%S")),
+    
+    time_category = case_when(
+      time_of_day >= sunrise & time_of_day < sunset ~ 1, # day
+      (time_of_day >= dawn & time_of_day < sunrise) | 
+        (time_of_day >= sunset & time_of_day < dusk) ~ 2, # twilight
+      TRUE ~ 3), #night
+    
+    month = lubridate::month(t1_, label = TRUE),
+    
+    season = case_when(
+      month %in% c("nov","dec", "janv", "febr") ~ 1, #winter
+      month %in% c("marts", "apr", "maijs") ~ 2, #spring
+      month %in% c("jūn", "jūl", "aug") ~ 3 #summer
+    )
+  ) %>%
+  select(-sunrise, -sunset, -dawn, -dusk, -lon, -lat)
+
+#joining the categories
+# steps3 <- steps3 %>%
+#   mutate(
+#     sunrise = chron(times = format(sunrise, format = "%H:%M:%S")),
+#     sunset = chron(times = format(sunset, format = "%H:%M:%S")),
+#     dawn = chron(times = format(dawn, format = "%H:%M:%S")),
+#     dusk = chron(times = format(dusk, format = "%H:%M:%S")),
+#     
+#     time_category = case_when(
+#       time_of_day >= sunrise & time_of_day < sunset ~ 1, # day
+#       TRUE ~ 3), #night 
+#     ) %>%
+#   select(-sunrise, -sunset, -dawn, -dusk, -lon, -lat)
+
+
+```
+
+
+
+```{r base movement model}
+
+steps3$landuse_factor <- factor(steps3$landuse,
+                                labels = c("Human-modified", "Deciduous",
+                                           "Coniferous", "Mixed", "Open/shrub/bog")) %>% 
+  relevel(ref = "Coniferous")
+
+steps3$time_category <- factor(steps3$time_category,
+                              levels = 1:3,
+                              labels = c("Day", "Twilight", "Night")) 
+
+# 1 = human-modified = agriculture and anthropogenic
+# 2 = broad-leaved (deciduous)
+# 3 = coniferous
+# 4 = mixed
+# 5 = open areas -> combine with srub and peatbog and water
+
+
+
+# Base Movement and Habitat Selection Model
+
+model_base1 <- fit_issf(
+  data = steps3, 
+  formula = case_ ~ landuse_factor + factor(new_forest) + 
+    log(sl_) + I(log(sl_)^2) + cos(ta_) +
+    log(sl_):landuse_factor + cos(ta_):landuse_factor +
+    strata(step_id_)
+)
+
+summary(model_base1)
+AIC_base1 <- AIC(model_base1)
+AIC_base1
+# [1] 83959.01
+
+
+# add the roads
+
+model_base2 <- fit_issf(
+  data = steps3, 
+  formula = case_ ~ landuse_factor + factor(new_forest) + 
+    minor_d + major_d + local_d +
+    log(sl_) + I(log(sl_)^2) + cos(ta_) +
+    log(sl_):landuse_factor + cos(ta_):landuse_factor +
+    cos(ta_):minor_d + cos(ta_):major_d + cos(ta_):local_d +
+    log(sl_):minor_d + log(sl_):major_d + log(sl_):local_d +
+    strata(step_id_)
+)
+
+summary(model_base2)
+AIC_base2 <- AIC(model_base2)
+AIC_base2
+
+```
+
+
+
+
+
+```{r other models}
+# # how movement parameters interact with road proximity
+# model_movement <- fit_issf(
+#   data = steps3, 
+#   formula = case_ ~ minor_d + major_d + local_d + log(sl_) + cos(ta_) + 
+#     factor(landuse) + sl_:minor_d + sl_:major_d + sl_:local_d + 
+#     strata(step_id_)
+# )
+# 
+# summary(model_movement)
+
+# inspect temporal patterns in road avoidance
+model_road_time <- fit_issf(
+  data = steps3, 
+  formula = case_ ~ minor_d + major_d + local_d +
+            minor_d:factor(time_category) + 
+            major_d:factor(time_category) + 
+            local_d:factor(time_category) + 
+            log(sl_) + cos(ta_) + 
+            strata(step_id_)
+)
+
+summary(model_road_time)
+
+# Call:
+# coxph(formula = Surv(rep(1, 294624L), case_) ~ minor_d + major_d + 
+#     local_d + minor_d:factor(time_category) + major_d:factor(time_category) + 
+#     local_d:factor(time_category) + log(sl_) + cos(ta_) + strata(step_id_), 
+#     data = data, method = "exact")
+# 
+#   n= 285614, number of events= 17774 
+#    (9010 observations deleted due to missingness)
+# 
+#                                      coef  exp(coef)   se(coef)      z Pr(>|z|)    
+# minor_d                         2.503e-04  1.000e+00  1.024e-04  2.443   0.0145 *  
+# major_d                        -8.885e-05  9.999e-01  1.005e-04 -0.884   0.3764    
+# local_d                         8.584e-04  1.001e+00  1.225e-04  7.008 2.42e-12 ***
+# log(sl_)                        1.854e-01  1.204e+00  8.101e-03 22.884  < 2e-16 ***
+# cos(ta_)                       -4.338e-04  9.996e-01  1.269e-02 -0.034   0.9727    
+# minor_d:factor(time_category)2  2.601e-05  1.000e+00  2.231e-04  0.117   0.9072    
+# minor_d:factor(time_category)3  1.309e-04  1.000e+00  1.541e-04  0.849   0.3957    
+# major_d:factor(time_category)2  2.541e-05  1.000e+00  2.172e-04  0.117   0.9069    
+# major_d:factor(time_category)3  3.602e-04  1.000e+00  1.519e-04  2.372   0.0177 *  
+# local_d:factor(time_category)2 -2.142e-04  9.998e-01  2.647e-04 -0.809   0.4184    
+# local_d:factor(time_category)3 -7.927e-04  9.992e-01  1.871e-04 -4.238 2.26e-05 ***
+
+
+
+# I tried also removing , and leaving just interactions, but the AIC was the same
+
+#------------------ trying to make road crossing detection -----------------------
+
+steps3$row_id <- 1:nrow(steps3)
+
+steps_lines <- st_sf(
+  geometry = mapply(
+    function(x1, y1, x2, y2) {
+      st_linestring(matrix(c(x1, y1, x2, y2), ncol = 2, byrow = TRUE))
+    },
+    steps3$x1_, steps3$y1_, steps3$x2_, steps3$y2_,
+    SIMPLIFY = FALSE
+  ),
+  row_id = steps3$row_id,
+  step_id_ = steps3$step_id_,
+  case_ = steps3$case_,
+  crs = 3301
+) 
+
+
+# data frame with crossing information
+crossing_data <- data.frame(
+  row_id = steps_lines$row_id,
+  crosses_major = lengths(st_intersects(steps_lines, roads[roads$class >= 2, ])) > 0,
+  crosses_minor = lengths(st_intersects(steps_lines, roads[roads$class == 1, ])) > 0,
+  crosses_local = lengths(st_intersects(steps_lines, roads[roads$class == 0, ])) > 0
+)
+
+#crossing information back to steps3
+steps3 <- merge(steps3, crossing_data, by = "row_id", all.x = TRUE)
+
+table(steps3$crosses_major)
+table(steps3$crosses_minor)
+table(steps3$crosses_local)
+
+
+# --------------------- model with crossings -------------------------------
+# simple model 
+model_with_crossings <- fit_issf(
+  data = steps3, 
+  formula = case_ ~ crosses_minor + crosses_major + crosses_local + 
+    log(sl_) + cos(ta_) + 
+    strata(step_id_)
+)
+
+summary(model_with_crossings)
+AIC(model_with_crossings)
+
+
+#                         coef  exp(coef)   se(coef)      z Pr(>|z|)    
+# crosses_minorTRUE  0.3093019  1.3624737  0.2123666  1.456    0.145    
+# crosses_majorTRUE -1.0355591  0.3550278  0.2449894 -4.227 2.37e-05 ***
+# crosses_localTRUE -0.3853227  0.6802311  0.0455199 -8.465  < 2e-16 ***
+# log(sl_)           0.1994907  1.2207809  0.0083064 24.016  < 2e-16 ***
+# cos(ta_)           0.0006096  1.0006098  0.0126825  0.048    0.962    
+# 
+# > AIC(model_with_crossings)
+# [1] 84606.82
+
+
+# time interactions
+model_with_crossings2 <- fit_issf(
+  data = steps3, 
+  formula = case_ ~ crosses_minor + crosses_major + crosses_local +
+    crosses_minor:factor(time_category) + 
+    crosses_major:factor(time_category) + 
+    crosses_local:factor(time_category) + 
+    log(sl_) + cos(ta_) + 
+    strata(step_id_)
+)
+
+summary(model_with_crossings2)
+AIC(model_with_crossings2)
+
+#                                                 coef  exp(coef)   se(coef)      z Pr(>|z|)    
+# crosses_minorTRUE                         -0.1322694  0.8761050  0.4195900 -0.315  0.75258    
+# crosses_majorTRUE                         -1.7838011  0.1679984  0.5913064 -3.017  0.00256 ** 
+# crosses_localTRUE                         -0.4029083  0.6683734  0.0751609 -5.361 8.29e-08 ***
+# log(sl_)                                   0.1993186  1.2205708  0.0083082 23.990  < 2e-16 ***
+# cos(ta_)                                   0.0007869  1.0007872  0.0126839  0.062  0.95053    
+# crosses_minorFALSE:factor(time_category)2 -1.2013094  0.3008001  0.7166574 -1.676  0.09369 .  
+# crosses_minorTRUE:factor(time_category)2          NA         NA  0.0000000     NA       NA    
+# crosses_minorFALSE:factor(time_category)3 -0.5082747  0.6015325  0.5031534 -1.010  0.31241    
+# crosses_minorTRUE:factor(time_category)3          NA         NA  0.0000000     NA       NA    
+# crosses_majorTRUE:factor(time_category)2   1.2659244  3.5463694  0.7958401  1.591  0.11168    
+# crosses_majorTRUE:factor(time_category)3   0.9093430  2.4826910  0.6707033  1.356  0.17516    
+# crosses_localTRUE:factor(time_category)2   0.3393927  1.4040946  0.1411275  2.405  0.01618 *  
+# crosses_localTRUE:factor(time_category)3  -0.0510544  0.9502270  0.0977377 -0.522  0.60142    
+# > AIC(model_with_crossings2)
+# [1] 84604.27
+
+
+
+# removing the minor road crossings
+model_with_crossings3 <- fit_issf(
+  data = steps3, 
+  formula = case_ ~crosses_major + crosses_local +
+    crosses_major:factor(time_category) + 
+    crosses_local:factor(time_category) + 
+    log(sl_) + cos(ta_) + 
+    strata(step_id_)
+)
+
+summary(model_with_crossings3)
+AIC(model_with_crossings3)
+#                                                 coef  exp(coef)   se(coef)      z Pr(>|z|)    
+# crosses_majorTRUE                         -1.7844312  0.1678925  0.5912968 -3.018  0.00255 ** 
+# crosses_localTRUE                         -0.4038658  0.6677338  0.0751498 -5.374 7.69e-08 ***
+# log(sl_)                                   0.1998360  1.2212025  0.0083011 24.073  < 2e-16 ***
+# cos(ta_)                                   0.0007765  1.0007768  0.0126838  0.061  0.95118    
+# crosses_majorFALSE:factor(time_category)2 -1.2644871  0.2823841  0.7958028 -1.589  0.11207    
+# crosses_majorTRUE:factor(time_category)2          NA         NA  0.0000000     NA       NA    
+# crosses_majorFALSE:factor(time_category)3 -0.9137628  0.4010125  0.6707367 -1.362  0.17309    
+# crosses_majorTRUE:factor(time_category)3          NA         NA  0.0000000     NA       NA    
+# crosses_localTRUE:factor(time_category)2   0.3484134  1.4168178  0.1409373  2.472  0.01343 *  
+# crosses_localTRUE:factor(time_category)3  -0.0492546  0.9519388  0.0977224 -0.504  0.61424    
+# > AIC(model_with_crossings3)
+# [1] 84603.09
+
+
+
+
+
+
+
+
+
+
+
+
+# Check distribution of crossings by time category
+crossing_counts <- table(
+  steps3$crosses_major, 
+  steps3$time_category, 
+  steps3$case_
+)
+
+crossing_counts
+
+
+
+```
+
+
+
+```{r inspect variables}
+
+
+
+numeric_predictors <- steps3[, sapply(steps3, is.numeric)] %>% select(-"x1_", -"x2_", -"y1_", -"y2_", "burst_", "step_id_")
+
+correlation_matrix <- cor(numeric_predictors, use = "complete.obs")
+
+print(correlation_matrix)
+
+corrplot(correlation_matrix, method = "color", type = "upper", 
+         order = "hclust", tl.col = "black", tl.srt = 45,
+         diag = FALSE) 
+
+```
+
+
+
+
+```{r Stefanie example, not accessible currently.. just paste}
+#'---
+#'title: RSF and SSF analysis of fisher 
+#'author: "S. Muff, J. Signer, J. Fieberg"
+#'date: "r format(Sys.time(), '%d %B, %Y')"
+#'output:
+#'  html_document:
+#'    toc: yes
+#'---
+
+#+ include = FALSE
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, cache = TRUE)
+
+#' ## Purpose
+#' The purpose of this document is to illustrate how a simple RSF and SSF with random effects can be fitted to tracking data. We use a data set containing fisher locations from:
+#' 
+#' - LaPoint, S., Gallery, P., Wikelski, M. and Kays, R. (2013). Animal behavior, cost-based corridor models, and real corridors. Landscape Ecology, 28, 1615-1630.
+#' 
+
+#' ## Load libraries and prepare data
+#+ echo=TRUE, message=FALSE, warning=FALSE
+library(glmmTMB)
+library(INLA)
+library(tidyverse)
+library(raster)
+library(survival)
+library(TwoStepCLogit)
+library(amt)
+
+#' First load the fisher data (this is the data as it was downloaded from movebank).
+#' We simplified the fisher data slightly, by running the following code prior to upload the data (to save space). This code is not needed, unless you download the original data from: https://www.datarepository.movebank.org/handle/10255/move.330.
+#+ eval=FALSE
+dat <- read_csv("Martes pennanti LaPoint New York.csv") %>% 
+  filter(!is.na(location-lat)) %>% 
+  select(x = location-long, y = location-lat, 
+         t = timestamp, id = tag-local-identifier) %>% 
+  filter(id %in% c(1465, 1466, 1072, 1078, 1016, 1469))
+write_csv(dat, "Fisher_analysis/fisher_data.csv")
+
+#' Now lets start by reading in the simplified fisher data
+
+dat <- read_csv("fisher_data.csv")
+
+#' Include sex of each animal and create tracks with an appropriate coordinate reference system using the amt package
+dat_all <- dat %>% nest(-id) 
+dat_all$sex <- c("f", "f", "f", "m", "m", "m")
+dat_all <- dat_all %>% 
+  mutate(trk = map(data, function(d) {
+    make_track(d, x, y, t, crs = sp::CRS("+init=epsg:4326")) %>% 
+      transform_coords(sp::CRS("+init=epsg:5070"))
+  }))
+
+#' Summarize sampling rates, 
+dat_all %>% mutate(sr = lapply(trk, summarize_sampling_rate)) %>% 
+  select(id, sr) %>% unnest
+
+#' 10 minutes seems to appropriate for all animals.
+#' Resample the track to 10 minutes with a tolerance of 2 minutes.
+
+dat1 <- dat_all %>% mutate(dat_clean = map(trk, ~ {
+  .x %>% track_resample(rate = minutes(10), tolerance = seconds(120))
+  }))
+
+#' Read in the landuse raster and reclassify to two categories (wet forests and other).
+landuse <- raster("landuse_study_area.tif")
+wet_forests <- landuse %in% c(90, 95)
+names(wet_forests) <- "forest"
+
+#' # Resource Selection Functions (RSF)
+#' 
+#' ## Data development for RSF
+#' 
+#' Now start with an RSF by creating random points per animal and extract the covariates for the observed and random points.
+
+dat_rsf <- dat1 %>% mutate(rp = map(dat_clean, ~ .x %>% random_points() %>% 
+      extract_covariates(wet_forests))) %>% 
+  select(id, rp) %>%  unnest()
+#' Change id column, to 1:6
+dat_rsf$id <- as.numeric(factor(dat_rsf$id))
+
+#' Make response numeric (required for INLA)
+dat_rsf$y <- as.numeric(dat_rsf$case_)
+
+#' We use a weighted likelihood for to fit the RSF. To this end, we need to create a variable for the weights, where used points (case_ = TRUE) keep weight 1, and available points (case_ = FALSE) obtain a large weight $W$ (here $W=1000$):
+#+ echo=TRUE, message=FALSE
+dat_rsf$weight <- 1000^(1 - dat_rsf$case_)
+
+#' ## Mixed RSFs
+#' 
+#' ### glmmTMB()
+#' 
+#' 
+#' As explained in the manuscript (Section 3.4), we recommend to manually fix the variance of the random intercept at a large value. This can be done in glmmTMB() by first setting up the model, but do not yet fit it:
+#+ echo=TRUE, message=FALSE,cache=TRUE
+fisher.tmp <- glmmTMB(case_ ~ forest + (1|id) + (0 + forest |id) , family=binomial(), data = dat_rsf,
+                         doFit=FALSE, weights = weight)
+
+
+#' Then fix the standard deviation of the first random term, which is the (1|id) component  in the above model equation. We use $\sigma=10^3$, which corresponds to a variance of $10^6$:
+#+ echo=TRUE, message=FALSE,cache=TRUE
+fisher.tmp$parameters$theta[1] <- log(1e3)
+
+
+#' We need to tell glmmTMB not to change the first entry of the vector of variances, and give all other variances another indicator to make sure they can be freely estimated:
+#+ echo=TRUE, message=FALSE,cache=TRUE
+fisher.tmp$mapArg <- list(theta=factor(c(NA, 1)))
+
+#' Then fit the model and look at the results:
+#+ echo=TRUE, message=FALSE, cache=TRUE 
+fisher.rsf <- glmmTMB:::fitTMB(fisher.tmp)
+summary(fisher.rsf)
+
+
+#' ###  INLA 
+#'
+#' Let us now carry the analysis with random intercept $\mathsf{N}(0,\sigma_{id}^2)$ and fixed variance $\sigma_{id}^2=10^6$ using INLA. A peculiarity of INLA is that the same variable cannot be used more than once. So for ID we need to generate a new (but identical) variable
+#+ echo=TRUE, message=FALSE
+dat_rsf$id1 <-dat_rsf$id
+
+#' For the fixed effects we use the INLA (default) priors $\beta \sim \mathsf{N}(0,\sigma_\beta^2)$ with $\sigma_\beta^2=10^4$. The precisions of the priors are thus set to:
+#+ echo=TRUE, message=FALSE
+prec.beta.forest  <- 1e-4  
+
+#' We now store the INLA formula with the fixed effects forest, plus two random effects, namely one for the individual-specific intercept and one for the individual-specific slope for forest. Note that the precision (thus $1/\sigma^2$) for id is fixed (fixed=TRUE) at the value of $10^{-6}$ (thus the variance is fixed at $10^6$). The other precision is given a PC(1,0.05) prior:
+#+ echo=TRUE, message=FALSE
+formula.inla <- y ~  forest + 
+  f(id, model="iid", hyper=list(theta = list(initial=log(1e-6),fixed=TRUE))) +
+  f(id1,forest,values=1:6,model="iid",
+    hyper=list(theta=list(initial=log(1),fixed=F,prior="pc.prec",param=c(1,0.05)))) 
+
+
+#' The actual INLA call is then given as follows:
+#+  echo=TRUE, message=FALSE, cache=TRUE
+inla.setOption(enable.inla.argument.weights=TRUE)
+fisher.inla  <- inla(formula.inla, family ="binomial", data=dat_rsf, weights=dat_rsf$weight,
+                        control.fixed = list(
+                          mean = 0,
+                          prec = list(forest = prec.beta.forest)
+                       )
+)
+
+
+
+#' The summary for the posterior distribution of the fixed effects is given as follows:
+#+ echo=TRUE
+fisher.inla$summary.fixed
+
+
+#' Since variances are parameterized and treated as precisions, the summary of the respective posterior distributions is given for the precisions:
+#+ echo=TRUE
+fisher.inla$summary.hyperpar
+
+
+#' Source R functions for calculating posterior means 
+#' and medians of the precisions.
+source("inla_emarginal.R")
+source("inla_mmarginal.R")
+inla_emarginal(fisher.inla)
+inla_mmarginal(fisher.inla)
+
+
+
+#' # Step-Selection Function (SSF)
+#' 
+#' ## Data development for step-selection function
+#' 
+#' First we need to prepare the data. We need to pair each observed point with 10 random points and extract the covariate value at the end point of each step.
+
+#+ warning = FALSE
+dat_ssf <- dat1 %>% 
+  mutate(stps = map(dat_clean, ~ .x %>% steps_by_burst() %>% 
+                      random_steps() %>% extract_covariates(wet_forests))) %>% 
+  select(id, stps) %>% unnest() %>% 
+  mutate(
+    y = as.numeric(case_),
+    id = as.numeric(factor(id)), 
+    step_id = paste0(id, step_id_, sep = "-"))
+dat_ssf
+
+
+#' ## Mixed SSFs 
+
+#' ### 2StepCLogit 
+
+#' The two-step procedure with independent random effect (D="UN(1)"):
+r.Twostep <-  Ts.estim(formula = y ~ forest + strata(step_id) + 
+                     cluster(id), data = dat_ssf, random = ~ forest,
+                   all.m.1=F, D="UN(1)") 
+
+#' Slope estimates and standard errors
+r.Twostep$beta
+r.Twostep$se
+
+#' Variance estimates
+r.Twostep$D
+
+#' ### glmmTMB
+
+
+#' ## Session Info
+#'
+devtools::session_info()
+
+
+#'---
+#' title: Habitat selection of otters (an SSF analysis)
+#' author: "S. Muff, J. Signer, J. Fieberg"
+#' date: "r format(Sys.time(), '%d %B, %Y')"
+#' output:
+#'   html_document: 
+#'     toc: true
+#'---
+#'
+#+ include = FALSE
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, cache = TRUE)
+#'  
+#' **Purpose**: This code replicates the analysis presented in Muff, Signer, Fieberg (2019) Section 4.2 "Habitat selection of otters: an SSF analysis".
+#'
+
+#' ## Load libraries and read in data
+#+ warning=FALSE, message=FALSE
+library(survival)
+library(TwoStepCLogit)
+library(INLA)
+library(glmmTMB)
+options(width=150)
+dat <-  read.csv("d_otter.csv")
+str(dat)
+
+#' NAT1, REST1 and STAU1 are the three factor levels of the factor variable habitat type, encoded as dummy variables, where
+#'
+#' - NAT1: natural habitat (reference category)
+#' - REST1: residual water
+#' - STAU1: a reservoir
+#'
+#' Further, the two continuous variables in the model are:
+#' 
+#' - Sohlbrei: the river width
+#' - Breaks_Dis: step length
+#' 
+#' Finally, Loc is the binary response variable that indicates if a habitat point was used (1) or available (0).
+#'
+#' ### Some data manipulation:
+
+#' Add numerical variable for animals:
+dat$ANIMAL_ID <- as.numeric(as.factor(dat$NA_ANIMAL))
+
+#' Stratum ID is given as "NA_ID" in the data; 
+#' It is easier to have sequential enumeration, so let's generate a new stratum-ID variable str_ID:
+d.map <- data.frame(NA_ID=unique(dat$NA_ID),str_ID=1:length(unique(dat$NA_ID)))
+dat$str_ID <- d.map[match(dat$NA_ID,d.map$NA_ID),"str_ID"]
+dat <- dat[order(dat$str_ID),]
+
+#' Scale and center the two continuous variables river width (Sohlenbrei) and step length (Breaks_Dis)
+dat$Sohlenbrei <- scale(dat$Sohlenbrei)
+dat$Breaks_Dis <- scale(dat$Breaks_Dis)
+
+
+#' ## Fixed effects models 
+ 
+#' ### clogit
+r.clogit <- clogit(Loc ~ STAU1 + REST1 + Sohlenbrei + Breaks_Dis  
+                   +   strata(str_ID), data=dat) 
+
+summary(r.clogit)$coef
+
+```
+
