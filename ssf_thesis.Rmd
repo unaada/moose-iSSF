@@ -17,7 +17,7 @@ library(lubridate)
 library(corrplot)
 
 library(amt)
-library(lme4)
+library(glmmTMB)
 
 ```
 
@@ -95,6 +95,17 @@ moose <- moose %>%
   make_track(UTM.Easting, UTM.Northing, timestamp, crs = 3301, id = id)
 
 head(moose, 5)
+
+> head(moose, 5)
+# # A tibble: 5 × 4
+#        x_       y_ t_                     id
+# *   <dbl>    <dbl> <dttm>              <int>
+# 1 591225. 6545176. 2018-11-23 22:30:18 39789
+# 2 591250. 6545167. 2018-11-23 23:00:08 39789
+# 3 591337. 6545008. 2018-11-23 23:30:16 39789
+# 4 591292. 6544921. 2018-11-24 00:00:11 39789
+# 5 591238. 6545135. 2018-11-24 00:30:30 39789
+
 summarize_sampling_rate_many(moose, "id")
 
 # make manipulations of moose data
@@ -122,10 +133,34 @@ points_to_keep <- moose_sf %>%
   pull(keep_point)
 
 moose_filter <- moose[points_to_keep, ]
+head(moose_filter, 5)
+
+# > head(moose_filter, 5)
+# # A tibble: 5 × 4
+#        x_       y_ t_                     id
+# *   <dbl>    <dbl> <dttm>              <int>
+# 1 591225. 6545176. 2018-11-23 22:30:18 39789
+# 2 591250. 6545167. 2018-11-23 23:00:08 39789
+# 3 591337. 6545008. 2018-11-23 23:30:16 39789
+# 4 591292. 6544921. 2018-11-24 00:00:11 39789
+# 5 591238. 6545131. 2018-11-24 03:00:15 39789
 
 # list-column to make it easy to apply functions to each animal data seperately 
 dat1 <- moose_filter %>% nest(data = -id)
 head(dat1,8)
+
+# > head(dat1,8)
+# # A tibble: 8 × 2
+#      id data                  
+#   <int> <list>                
+# 1 39789 <trck_xyt [4,548 × 3]>
+# 2 39787 <trck_xyt [6,073 × 3]>
+# 3 39785 <trck_xyt [5,870 × 3]>
+# 4 39788 <trck_xyt [5,140 × 3]>
+# 5 39793 <trck_xyt [5,894 × 3]>
+# 6 39791 <trck_xyt [5,780 × 3]>
+# 7 39790 <trck_xyt [5,464 × 3]>
+# 8 39794 <trck_xyt [6,430 × 3]>
 
 # resample to have everything consistent
 dat2 <- dat1 %>% 
@@ -133,6 +168,7 @@ dat2 <- dat1 %>%
                                                    rate = lubridate::minutes(30), 
                                                    tolerance = lubridate::minutes(2)))) 
 
+head(dat2)
 ```
 
 
@@ -302,9 +338,24 @@ moose_lines <- moose_sf %>%
 ```
 
 ```{r all moose}
-all_moose <- dat2$dat.resample %>%
-  bind_rows() %>%  # This combines all moose into one dataset
-  filter_min_n_burst(min_n = 3)
+dat3 <- dat2 %>%
+  mutate(dat.filtered = map(dat.resample, ~ filter_min_n_burst(., min_n = 3)))
+
+head(dat3, 5)
+all_moose <- dat3$dat.filtered %>%
+  bind_rows()
+
+head(all_moose, 5)
+
+# # A tibble: 5 × 4
+#        x_       y_ t_                  burst_
+# *   <dbl>    <dbl> <dttm>               <dbl>
+# 1 591225. 6545176. 2018-11-23 22:30:18      1
+# 2 591250. 6545167. 2018-11-23 23:00:08      1
+# 3 591337. 6545008. 2018-11-23 23:30:16      1
+# 4 591292. 6544921. 2018-11-24 00:00:11      1
+# 5 592230. 6545016. 2018-11-24 09:00:06      4
+
 
 steps <- all_moose %>%
   steps_by_burst() %>%
@@ -386,7 +437,7 @@ steps3$landuse_factor <- factor(steps3$landuse,
                                            "Coniferous", "Mixed", "Open/shrub/bog")) %>% 
   relevel(ref = "Coniferous")
 
-steps3$time_category <- factor(steps3$time_category,
+steps3$time_factor <- factor(steps3$time_category,
                               levels = 1:3,
                               labels = c("Day", "Twilight", "Night")) 
 
@@ -418,18 +469,51 @@ AIC_base1
 
 model_base2 <- fit_issf(
   data = steps3, 
-  formula = case_ ~ landuse_factor + factor(new_forest) + 
-    minor_d + major_d + local_d +
-    log(sl_) + I(log(sl_)^2) + cos(ta_) +
-    log(sl_):landuse_factor + cos(ta_):landuse_factor +
-    cos(ta_):minor_d + cos(ta_):major_d + cos(ta_):local_d +
-    log(sl_):minor_d + log(sl_):major_d + log(sl_):local_d +
-    strata(step_id_)
+  formula = 
 )
 
 summary(model_base2)
 AIC_base2 <- AIC(model_base2)
 AIC_base2
+
+#----------------------------------------------------- glmm -------------------------------
+
+# attempt glmm
+steps3$log_sl_ <- scale(log(steps3$sl_))
+steps3$cos_ta_ <- scale(cos(steps3$ta_))
+steps3$minor_d <- scale(steps3$minor_d)
+steps3$major_d <- scale(steps3$major_d)
+steps3$local_d <- scale(steps3$local_d)
+
+d.map <- data.frame(step_id_=unique(steps3$step_id_), 
+                    str_ID=1:length(unique(steps3$step_id_)))
+
+# Assign new sequential stratum ID
+steps3$str_ID <- d.map[match(steps3$step_id_, d.map$step_id_), "str_ID"]
+
+# Order data by stratum ID
+steps3 <- steps3[order(steps3$str_ID),]
+
+
+# Define GLMM structure without fitting
+TMBStruc <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    minor_d + major_d + local_d + 
+    landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc$parameters$theta[1] = log(1e3)  
+
+TMBStruc$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm <- glmmTMB:::fitTMB(TMBStruc)
+
+summary(model_glmm)
 
 ```
 
@@ -646,6 +730,18 @@ corrplot(correlation_matrix, method = "color", type = "upper",
          diag = FALSE) 
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
