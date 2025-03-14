@@ -342,11 +342,19 @@ dat3 <- dat2 %>%
   mutate(dat.filtered = map(dat.resample, ~ filter_min_n_burst(., min_n = 3)))
 
 head(dat3, 5)
+# # A tibble: 5 × 4
+#      id data                   dat.resample           dat.filtered          
+#   <int> <list>                 <list>                 <list>                
+# 1 39789 <trck_xyt [4,548 × 3]> <trck_xyt [4,547 × 4]> <trck_xyt [2,685 × 4]>
+# 2 39787 <trck_xyt [6,073 × 3]> <trck_xyt [6,073 × 4]> <trck_xyt [4,395 × 4]>
+# 3 39785 <trck_xyt [5,870 × 3]> <trck_xyt [5,868 × 4]> <trck_xyt [4,366 × 4]>
+# 4 39788 <trck_xyt [5,140 × 3]> <trck_xyt [5,137 × 4]> <trck_xyt [3,357 × 4]>
+# 5 39793 <trck_xyt [5,894 × 3]> <trck_xyt [5,892 × 4]> <trck_xyt [4,370 × 4]>
+
 all_moose <- dat3$dat.filtered %>%
   bind_rows()
 
 head(all_moose, 5)
-
 # # A tibble: 5 × 4
 #        x_       y_ t_                  burst_
 # *   <dbl>    <dbl> <dttm>               <dbl>
