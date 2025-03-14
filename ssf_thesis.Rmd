@@ -124,6 +124,7 @@ study_area <- moose_sf %>%
   st_union() %>%
   st_as_sf()
 
+# remove the points when animals are resting
 points_to_keep <- moose_sf %>%
   group_by(id) %>%
   mutate(
@@ -166,7 +167,7 @@ head(dat1,8)
 dat2 <- dat1 %>% 
   mutate(dat.resample = map(data, ~ track_resample(., 
                                                    rate = lubridate::minutes(30), 
-                                                   tolerance = lubridate::minutes(2)))) 
+                                                   tolerance = lubridate::minutes(5)))) 
 
 head(dat2)
 ```
@@ -337,7 +338,10 @@ moose_lines <- moose_sf %>%
 
 ```
 
+
+
 ```{r all moose}
+
 dat3 <- dat2 %>%
   mutate(dat.filtered = map(dat.resample, ~ filter_min_n_burst(., min_n = 3)))
 
@@ -351,9 +355,32 @@ head(dat3, 5)
 # 4 39788 <trck_xyt [5,140 × 3]> <trck_xyt [5,137 × 4]> <trck_xyt [3,357 × 4]>
 # 5 39793 <trck_xyt [5,894 × 3]> <trck_xyt [5,892 × 4]> <trck_xyt [4,370 × 4]>
 
-all_moose <- map2_dfr(dat3$dat.filtered, dat3$id, function(track_data, animal_id) {
-  track_data %>% mutate(id = animal_id)
+
+all_moose <- map2_dfr(dat3$dat.filtered, dat3$id, ~{
+  .x %>% mutate(id = .y)
 })
+
+
+# Count steps per burst for each animal
+burst_counts <- all_moose %>%
+  group_by(id, burst_) %>%
+  summarize(n_steps = n(), .groups = "drop") %>%
+  arrange(id, burst_)
+
+# Look at distribution of burst sizes
+hist(burst_counts$n_steps, 
+     main = "Histogram of Steps per Burst", 
+     xlab = "Number of Steps")
+
+# Check how many bursts each animal has
+burst_by_animal <- burst_counts %>%
+  group_by(id) %>%
+  summarize(n_bursts = n(), 
+            avg_steps_per_burst = mean(n_steps),
+            min_steps = min(n_steps),
+            max_steps = max(n_steps))
+print(burst_by_animal)
+
 
 head(all_moose, 5)
 # # A tibble: 5 × 5
@@ -366,12 +393,23 @@ head(all_moose, 5)
 # 5 592230. 6545016. 2018-11-24 09:00:06      4 39789
 
 
+# Get the burst-to-id mapping
+burst_id_map <- all_moose %>%
+  select(id, burst_) %>%
+  distinct()
+
+# Create steps
 steps <- all_moose %>%
   steps_by_burst() %>%
   random_steps(n_control = 10, 
               sl_distr = fit_distr(.$sl_, "gamma"),
               ta_distr = fit_distr(.$ta_, "vonmises"), 
-              include_observed = TRUE) 
+              include_observed = TRUE)
+
+# Join back the id based on burst_
+steps1 <- steps %>%
+  left_join(burst_id_map, by = "burst_", relationship = "many-to-one", multiple = "first")
+
 
 # A tibble: 13 × 12
 #    burst_     x1_     x2_      y1_      y2_    sl_     ta_ t1_                 t2_                 dt_           case_ step_id_
@@ -390,7 +428,9 @@ steps <- all_moose %>%
 # 12      1 591337. 591292. 6545008. 6544921.  97.5  -0.982  2018-11-23 23:30:16 2018-11-24 00:00:11 29.91667 mins TRUE         4
 # 13      1 591337. 591456. 6545008. 6544888. 168.    0.278  2018-11-23 23:30:16 2018-11-24 00:00:11 29.91667 mins FALSE        4
 
-steps2 <- steps %>% 
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! did not run with the new steps f
+steps2 <- steps1 %>% 
   extract_covariates(landuse) %>% 
   extract_covariates(new_forest) %>% 
   extract_covariates(major_roads_dist) %>%
