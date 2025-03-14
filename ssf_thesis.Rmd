@@ -351,8 +351,8 @@ head(dat3, 5)
 # 4 39788 <trck_xyt [5,140 × 3]> <trck_xyt [5,137 × 4]> <trck_xyt [3,357 × 4]>
 # 5 39793 <trck_xyt [5,894 × 3]> <trck_xyt [5,892 × 4]> <trck_xyt [4,370 × 4]>
 
-all_moose <- map2_dfr(dat3$dat.filtered, dat3$id, ~{
-  .x %>% mutate(id = .y)
+all_moose <- map2_dfr(dat3$dat.filtered, dat3$id, function(track_data, animal_id) {
+  track_data %>% mutate(id = animal_id)
 })
 
 head(all_moose, 5)
