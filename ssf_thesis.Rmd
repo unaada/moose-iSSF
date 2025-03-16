@@ -96,7 +96,6 @@ moose <- moose %>%
 
 head(moose, 5)
 
-> head(moose, 5)
 # # A tibble: 5 × 4
 #        x_       y_ t_                     id
 # *   <dbl>    <dbl> <dttm>              <int>
@@ -129,7 +128,7 @@ points_to_keep <- moose_sf %>%
   group_by(id) %>%
   mutate(
     distance = as.numeric(st_distance(geometry, lead(geometry), by_element = TRUE)),
-    keep_point = !is.na(distance) & distance > 20
+    keep_point = !is.na(distance) & distance > 18
   ) %>%
   pull(keep_point)
 
@@ -167,7 +166,7 @@ head(dat1,8)
 dat2 <- dat1 %>% 
   mutate(dat.resample = map(data, ~ track_resample(., 
                                                    rate = lubridate::minutes(30), 
-                                                   tolerance = lubridate::minutes(5)))) 
+                                                   tolerance = lubridate::minutes(2)))) 
 
 head(dat2)
 ```
@@ -342,95 +341,31 @@ moose_lines <- moose_sf %>%
 
 ```{r all moose}
 
+# remove for each moose if burst < 3
 dat3 <- dat2 %>%
   mutate(dat.filtered = map(dat.resample, ~ filter_min_n_burst(., min_n = 3)))
-
-head(dat3, 5)
-# # A tibble: 5 × 4
-#      id data                   dat.resample           dat.filtered          
-#   <int> <list>                 <list>                 <list>                
-# 1 39789 <trck_xyt [4,548 × 3]> <trck_xyt [4,547 × 4]> <trck_xyt [2,685 × 4]>
-# 2 39787 <trck_xyt [6,073 × 3]> <trck_xyt [6,073 × 4]> <trck_xyt [4,395 × 4]>
-# 3 39785 <trck_xyt [5,870 × 3]> <trck_xyt [5,868 × 4]> <trck_xyt [4,366 × 4]>
-# 4 39788 <trck_xyt [5,140 × 3]> <trck_xyt [5,137 × 4]> <trck_xyt [3,357 × 4]>
-# 5 39793 <trck_xyt [5,894 × 3]> <trck_xyt [5,892 × 4]> <trck_xyt [4,370 × 4]>
-
-
+# try to retain the filtered AND the id columns
 all_moose <- map2_dfr(dat3$dat.filtered, dat3$id, ~{
   .x %>% mutate(id = .y)
 })
-
-
-# Count steps per burst for each animal
-burst_counts <- all_moose %>%
-  group_by(id, burst_) %>%
-  summarize(n_steps = n(), .groups = "drop") %>%
-  arrange(id, burst_)
-
-# Look at distribution of burst sizes
-hist(burst_counts$n_steps, 
-     main = "Histogram of Steps per Burst", 
-     xlab = "Number of Steps")
-
-# Check how many bursts each animal has
-burst_by_animal <- burst_counts %>%
-  group_by(id) %>%
-  summarize(n_bursts = n(), 
-            avg_steps_per_burst = mean(n_steps),
-            min_steps = min(n_steps),
-            max_steps = max(n_steps))
-print(burst_by_animal)
-
-
-head(all_moose, 5)
-# # A tibble: 5 × 5
-#        x_       y_ t_                  burst_    id
-# *   <dbl>    <dbl> <dttm>               <dbl> <int>
-# 1 591225. 6545176. 2018-11-23 22:30:18      1 39789
-# 2 591250. 6545167. 2018-11-23 23:00:08      1 39789
-# 3 591337. 6545008. 2018-11-23 23:30:16      1 39789
-# 4 591292. 6544921. 2018-11-24 00:00:11      1 39789
-# 5 592230. 6545016. 2018-11-24 09:00:06      4 39789
-
-
-# Get the burst-to-id mapping
+# again it wants to remove the id, so make map
 burst_id_map <- all_moose %>%
   select(id, burst_) %>%
   distinct()
-
-# Create steps
+# regular generation of steps
 steps <- all_moose %>%
   steps_by_burst() %>%
   random_steps(n_control = 10, 
               sl_distr = fit_distr(.$sl_, "gamma"),
               ta_distr = fit_distr(.$ta_, "vonmises"), 
-              include_observed = TRUE)
+              include_observed = TRUE) %>% 
+  remove_incomplete_strata()
 
-# Join back the id based on burst_
-steps1 <- steps %>%
+# try to join back the moose id to have for glmmm as random effect
+steps <- steps %>%
   left_join(burst_id_map, by = "burst_", relationship = "many-to-one", multiple = "first")
 
-
-# A tibble: 13 × 12
-#    burst_     x1_     x2_      y1_      y2_    sl_     ta_ t1_                 t2_                 dt_           case_ step_id_
-#  *  <dbl>   <dbl>   <dbl>    <dbl>    <dbl>  <dbl>   <dbl> <dttm>              <dttm>              <drtn>        <lgl>    <dbl>
-#  1      1 591250. 591337. 6545167. 6545008. 182.   -0.719  2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins TRUE         3
-#  2      1 591250. 591592. 6545167. 6544770. 525.   -0.509  2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-#  3      1 591250. 591299. 6545167. 6545171.  49.8   0.439  2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-#  4      1 591250. 591415. 6545167. 6545004. 232.   -0.431  2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-#  5      1 591250. 591252. 6545167. 6544970. 197.   -1.21   2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-#  6      1 591250. 591365. 6545167. 6545173. 115.    0.399  2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-#  7      1 591250. 591317. 6545167. 6545284. 134.    1.40   2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-#  8      1 591250. 591196. 6545167. 6545157.  54.9  -2.60   2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-#  9      1 591250. 591311. 6545167. 6545149.  63.7   0.0541 2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-# 10      1 591250. 591252. 6545167. 6545164.   3.47 -0.619  2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-# 11      1 591250. 591207. 6545167. 6545032. 142.   -1.53   2018-11-23 23:00:08 2018-11-23 23:30:16 30.13333 mins FALSE        3
-# 12      1 591337. 591292. 6545008. 6544921.  97.5  -0.982  2018-11-23 23:30:16 2018-11-24 00:00:11 29.91667 mins TRUE         4
-# 13      1 591337. 591456. 6545008. 6544888. 168.    0.278  2018-11-23 23:30:16 2018-11-24 00:00:11 29.91667 mins FALSE        4
-
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! did not run with the new steps f
-steps2 <- steps1 %>% 
+steps2 <- steps %>% 
   extract_covariates(landuse) %>% 
   extract_covariates(new_forest) %>% 
   extract_covariates(major_roads_dist) %>%
@@ -462,17 +397,17 @@ steps3 <- steps2 %>%
     dusk = chron(times = format(dusk, format = "%H:%M:%S")),
     
     time_category = case_when(
-      time_of_day >= sunrise & time_of_day < sunset ~ 1, # day
+      time_of_day >= sunrise & time_of_day < sunset ~ "Day", # day
       (time_of_day >= dawn & time_of_day < sunrise) | 
-        (time_of_day >= sunset & time_of_day < dusk) ~ 2, # twilight
-      TRUE ~ 3), #night
+        (time_of_day >= sunset & time_of_day < dusk) ~ "Twilight", # twilight
+      TRUE ~ "Night"), #night
     
     month = lubridate::month(t1_, label = TRUE),
     
     season = case_when(
-      month %in% c("nov","dec", "janv", "febr") ~ 1, #winter
-      month %in% c("marts", "apr", "maijs") ~ 2, #spring
-      month %in% c("jūn", "jūl", "aug") ~ 3 #summer
+      month %in% c("Nov","Dec", "Jan", "Feb") ~ "Winter", #winter
+      month %in% c("Mar", "Apr", "May") ~ "Spring", #spring
+      month %in% c("Jun", "Jul", "Aug", "Sep") ~ "Summer" #summer
     )
   ) %>%
   select(-sunrise, -sunset, -dawn, -dusk, -lon, -lat)
@@ -512,15 +447,12 @@ steps3$landuse_factor <- factor(steps3$landuse,
                                            "Coniferous", "Mixed", "Open/shrub/bog")) %>% 
   relevel(ref = "Coniferous")
 
-steps3$time_factor <- factor(steps3$time_category,
-                              levels = 1:3,
-                              labels = c("Day", "Twilight", "Night")) 
 
 # 1 = human-modified = agriculture and anthropogenic
 # 2 = broad-leaved (deciduous)
 # 3 = coniferous
 # 4 = mixed
-# 5 = open areas -> combine with srub and peatbog and water
+# 5 = open areas -> combine with shrub and peatbog and water
 
 
 
@@ -540,18 +472,7 @@ AIC_base1
 # [1] 83959.01
 
 
-# add the roads
-
-model_base2 <- fit_issf(
-  data = steps3, 
-  formula = 
-)
-
-summary(model_base2)
-AIC_base2 <- AIC(model_base2)
-AIC_base2
-
-#----------------------------------------------------- glmm -------------------------------
+#----------------------------------------------------- glmm ----------------------------------------------------
 
 # attempt glmm
 steps3$log_sl_ <- scale(log(steps3$sl_))
@@ -560,10 +481,8 @@ steps3$minor_d <- scale(steps3$minor_d)
 steps3$major_d <- scale(steps3$major_d)
 steps3$local_d <- scale(steps3$local_d)
 
-
-
 # Define GLMM structure without fitting
-TMBStruc <- glmmTMB(
+TMBStruc2 <- glmmTMB(
   case_ ~ log_sl_ + cos_ta_ + 
     minor_d + major_d + local_d + 
     landuse_factor +
@@ -574,18 +493,146 @@ TMBStruc <- glmmTMB(
   doFit = FALSE
 )
 
-TMBStruc$parameters$theta[1] = log(1e3)  
+TMBStruc2$parameters$theta[1] = log(1e3)  
 
-TMBStruc$mapArg = list(theta = factor(c(NA, 1)))
+TMBStruc2$mapArg = list(theta = factor(c(NA, 1)))
 
-model_glmm <- glmmTMB:::fitTMB(TMBStruc)
+model_glmm2 <- glmmTMB:::fitTMB(TMBStruc2)
 
-summary(model_glmm)
+summary(model_glmm2)
+# 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364600.9  364712.9 -182289.4  364578.9    194810 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.466e-01    0.3829
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -2.935093   7.516893  -0.390  0.69619    
+# log_sl_                       0.135944   0.008303  16.372  < 2e-16 ***
+# cos_ta_                       0.006223   0.007926   0.785  0.43241    
+# minor_d                       0.389595   0.093601   4.162 3.15e-05 ***
+# major_d                       0.051157   0.098450   0.520  0.60333    
+# local_d                       0.105891   0.023514   4.503 6.69e-06 ***
+# landuse_factorHuman-modified -0.447389   0.048708  -9.185  < 2e-16 ***
+# landuse_factorDeciduous       0.220625   0.058205   3.790  0.00015 ***
+# landuse_factorMixed           0.008961   0.036493   0.246  0.80603    
+# landuse_factorOpen/shrub/bog  0.001579   0.040038   0.039  0.96854 
+
+#------------------------------------------------------------------season -------------------------------------
+# Define GLMM structure without fitting
+TMBStruc3 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    minor_d + major_d + local_d + 
+    landuse_factor +
+    factor(season):minor_d + factor(season):major_d + factor(season):local_d +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc3$parameters$theta[1] = log(1e3)  
+
+TMBStruc3$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm3 <- glmmTMB:::fitTMB(TMBStruc3)
+
+summary(model_glmm3)
+# 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364586.4  364759.4 -182276.2  364552.4    194804 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.492e-01    0.3862
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -2.930233   7.516954  -0.390 0.696672    
+# log_sl_                       0.136254   0.008306  16.405  < 2e-16 ***
+# cos_ta_                       0.006218   0.007929   0.784 0.432906    
+# minor_d                       0.384017   0.159835   2.403 0.016280 *  
+# major_d                       0.165209   0.169520   0.975 0.329772    
+# local_d                       0.139183   0.040556   3.432 0.000599 ***
+# landuse_factorHuman-modified -0.456627   0.048841  -9.349  < 2e-16 ***
+# landuse_factorDeciduous       0.230805   0.058270   3.961 7.47e-05 ***
+# landuse_factorMixed           0.011734   0.036521   0.321 0.747991    
+# landuse_factorOpen/shrub/bog  0.011550   0.040094   0.288 0.773297    
+# minor_d:factor(season)Summer  0.079400   0.223164   0.356 0.721997    
+# minor_d:factor(season)Winter -0.009270   0.234461  -0.040 0.968460    
+# major_d:factor(season)Summer -0.259332   0.234999  -1.104 0.269790    
+# major_d:factor(season)Winter -0.073705   0.247966  -0.297 0.766285    
+# local_d:factor(season)Summer  0.068997   0.055190   1.250 0.211238    
+# local_d:factor(season)Winter -0.213957   0.059158  -3.617 0.000298 ***
+
+
+# ---------------------------------------------------------- time ----------------------------------------------
+TMBStruc4 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    minor_d + major_d + local_d + 
+    landuse_factor +
+    factor(time_category):minor_d + factor(time_category):major_d + factor(time_category):local_d +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc4$parameters$theta[1] = log(1e3)  
+
+TMBStruc4$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm4 <- glmmTMB:::fitTMB(TMBStruc4)
+
+summary(model_glmm4)
+
+# 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364584.5  364757.6 -182275.3  364550.5    194804 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.491e-01    0.3861
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                                        Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                           -2.937849   7.516933  -0.391 0.695922    
+# log_sl_                                0.136662   0.008309  16.448  < 2e-16 ***
+# cos_ta_                                0.006293   0.007929   0.794 0.427416    
+# minor_d                                0.369509   0.135090   2.735 0.006233 ** 
+# major_d                               -0.042561   0.141657  -0.300 0.763835    
+# local_d                                0.215358   0.033172   6.492 8.46e-11 ***
+# landuse_factorHuman-modified          -0.455815   0.048825  -9.336  < 2e-16 ***
+# landuse_factorDeciduous                0.222483   0.058210   3.822 0.000132 ***
+# landuse_factorMixed                    0.010424   0.036523   0.285 0.775321    
+# landuse_factorOpen/shrub/bog           0.006071   0.040050   0.152 0.879521    
+# minor_d:factor(time_category)Night     0.125386   0.202175   0.620 0.535133    
+# minor_d:factor(time_category)Twilight -0.128599   0.286251  -0.449 0.653249    
+# major_d:factor(time_category)Night     0.290574   0.213288   1.362 0.173085    
+# major_d:factor(time_category)Twilight -0.095513   0.299332  -0.319 0.749660    
+# local_d:factor(time_category)Night    -0.256509   0.050620  -5.067 4.03e-07 ***
+# local_d:factor(time_category)Twilight -0.118236   0.070842  -1.669 0.095114 . 
 
 ```
 
 # ---------------------------- IGNORE AFTER THIS -------------------------------------------------------
-
 
 
 ```{r other models}
@@ -599,46 +646,8 @@ summary(model_glmm)
 # 
 # summary(model_movement)
 
-# inspect temporal patterns in road avoidance
-model_road_time <- fit_issf(
-  data = steps3, 
-  formula = case_ ~ minor_d + major_d + local_d +
-            minor_d:factor(time_category) + 
-            major_d:factor(time_category) + 
-            local_d:factor(time_category) + 
-            log(sl_) + cos(ta_) + 
-            strata(step_id_)
-)
 
-summary(model_road_time)
-
-# Call:
-# coxph(formula = Surv(rep(1, 294624L), case_) ~ minor_d + major_d + 
-#     local_d + minor_d:factor(time_category) + major_d:factor(time_category) + 
-#     local_d:factor(time_category) + log(sl_) + cos(ta_) + strata(step_id_), 
-#     data = data, method = "exact")
-# 
-#   n= 285614, number of events= 17774 
-#    (9010 observations deleted due to missingness)
-# 
-#                                      coef  exp(coef)   se(coef)      z Pr(>|z|)    
-# minor_d                         2.503e-04  1.000e+00  1.024e-04  2.443   0.0145 *  
-# major_d                        -8.885e-05  9.999e-01  1.005e-04 -0.884   0.3764    
-# local_d                         8.584e-04  1.001e+00  1.225e-04  7.008 2.42e-12 ***
-# log(sl_)                        1.854e-01  1.204e+00  8.101e-03 22.884  < 2e-16 ***
-# cos(ta_)                       -4.338e-04  9.996e-01  1.269e-02 -0.034   0.9727    
-# minor_d:factor(time_category)2  2.601e-05  1.000e+00  2.231e-04  0.117   0.9072    
-# minor_d:factor(time_category)3  1.309e-04  1.000e+00  1.541e-04  0.849   0.3957    
-# major_d:factor(time_category)2  2.541e-05  1.000e+00  2.172e-04  0.117   0.9069    
-# major_d:factor(time_category)3  3.602e-04  1.000e+00  1.519e-04  2.372   0.0177 *  
-# local_d:factor(time_category)2 -2.142e-04  9.998e-01  2.647e-04 -0.809   0.4184    
-# local_d:factor(time_category)3 -7.927e-04  9.992e-01  1.871e-04 -4.238 2.26e-05 ***
-
-
-
-# I tried also removing , and leaving just interactions, but the AIC was the same
-
-#------------------ trying to make road crossing detection -----------------------
+#------------------------------------------------- making road crossing detection -----------------------
 
 steps3$row_id <- 1:nrow(steps3)
 
@@ -674,107 +683,159 @@ table(steps3$crosses_local)
 
 
 # --------------------- model with crossings -------------------------------
-# simple model 
-model_with_crossings <- fit_issf(
-  data = steps3, 
-  formula = case_ ~ crosses_minor + crosses_major + crosses_local + 
-    log(sl_) + cos(ta_) + 
-    strata(step_id_)
+
+
+# -------------------------------------------------------------------- crossing  -------------
+
+# Define GLMM structure without fitting
+TMBStruc22 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    crosses_minor + crosses_major + crosses_local + 
+    landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
 )
 
-summary(model_with_crossings)
-AIC(model_with_crossings)
+TMBStruc22$parameters$theta[1] = log(1e3)  
 
+TMBStruc22$mapArg = list(theta = factor(c(NA, 1)))
 
-#                         coef  exp(coef)   se(coef)      z Pr(>|z|)    
-# crosses_minorTRUE  0.3093019  1.3624737  0.2123666  1.456    0.145    
-# crosses_majorTRUE -1.0355591  0.3550278  0.2449894 -4.227 2.37e-05 ***
-# crosses_localTRUE -0.3853227  0.6802311  0.0455199 -8.465  < 2e-16 ***
-# log(sl_)           0.1994907  1.2207809  0.0083064 24.016  < 2e-16 ***
-# cos(ta_)           0.0006096  1.0006098  0.0126825  0.048    0.962    
+model_glmm22 <- glmmTMB:::fitTMB(TMBStruc22)
+
+summary(model_glmm22)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364523.2  364635.2 -182250.6  364501.2    194810 
 # 
-# > AIC(model_with_crossings)
-# [1] 84606.82
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.528e-01    0.3909
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -2.889117   7.517020  -0.384   0.7007    
+# log_sl_                       0.152736   0.008532  17.902  < 2e-16 ***
+# cos_ta_                       0.009919   0.007932   1.251   0.2111    
+# crosses_minorTRUE             0.430581   0.217417   1.980   0.0477 *  
+# crosses_majorTRUE            -1.064889   0.244930  -4.348 1.38e-05 ***
+# crosses_localTRUE            -0.396981   0.045602  -8.705  < 2e-16 ***
+# landuse_factorHuman-modified -0.497643   0.048607 -10.238  < 2e-16 ***
+# landuse_factorDeciduous       0.235597   0.058366   4.037 5.42e-05 ***
+# landuse_factorMixed          -0.029234   0.036510  -0.801   0.4233    
+# landuse_factorOpen/shrub/bog -0.039269   0.040255  -0.976   0.3293  
 
-
-# time interactions
-model_with_crossings2 <- fit_issf(
-  data = steps3, 
-  formula = case_ ~ crosses_minor + crosses_major + crosses_local +
-    crosses_minor:factor(time_category) + 
-    crosses_major:factor(time_category) + 
-    crosses_local:factor(time_category) + 
-    log(sl_) + cos(ta_) + 
-    strata(step_id_)
+#------------------------------------------------------------------season 2: with crossing --------------------------
+# Define GLMM structure without fitting
+TMBStruc33 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    crosses_minor + crosses_major + crosses_local + 
+    landuse_factor +
+    factor(season):crosses_minor + factor(season):crosses_major + factor(season):crosses_local +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
 )
 
-summary(model_with_crossings2)
-AIC(model_with_crossings2)
+TMBStruc33$parameters$theta[1] = log(1e3)  
 
-#                                                 coef  exp(coef)   se(coef)      z Pr(>|z|)    
-# crosses_minorTRUE                         -0.1322694  0.8761050  0.4195900 -0.315  0.75258    
-# crosses_majorTRUE                         -1.7838011  0.1679984  0.5913064 -3.017  0.00256 ** 
-# crosses_localTRUE                         -0.4029083  0.6683734  0.0751609 -5.361 8.29e-08 ***
-# log(sl_)                                   0.1993186  1.2205708  0.0083082 23.990  < 2e-16 ***
-# cos(ta_)                                   0.0007869  1.0007872  0.0126839  0.062  0.95053    
-# crosses_minorFALSE:factor(time_category)2 -1.2013094  0.3008001  0.7166574 -1.676  0.09369 .  
-# crosses_minorTRUE:factor(time_category)2          NA         NA  0.0000000     NA       NA    
-# crosses_minorFALSE:factor(time_category)3 -0.5082747  0.6015325  0.5031534 -1.010  0.31241    
-# crosses_minorTRUE:factor(time_category)3          NA         NA  0.0000000     NA       NA    
-# crosses_majorTRUE:factor(time_category)2   1.2659244  3.5463694  0.7958401  1.591  0.11168    
-# crosses_majorTRUE:factor(time_category)3   0.9093430  2.4826910  0.6707033  1.356  0.17516    
-# crosses_localTRUE:factor(time_category)2   0.3393927  1.4040946  0.1411275  2.405  0.01618 *  
-# crosses_localTRUE:factor(time_category)3  -0.0510544  0.9502270  0.0977377 -0.522  0.60142    
-# > AIC(model_with_crossings2)
-# [1] 84604.27
+TMBStruc33$mapArg = list(theta = factor(c(NA, 1)))
 
+model_glmm33 <- glmmTMB:::fitTMB(TMBStruc33)
 
+summary(model_glmm33)
 
-# removing the minor road crossings
-model_with_crossings3 <- fit_issf(
-  data = steps3, 
-  formula = case_ ~crosses_major + crosses_local +
-    crosses_major:factor(time_category) + 
-    crosses_local:factor(time_category) + 
-    log(sl_) + cos(ta_) + 
-    strata(step_id_)
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364519.3  364712.7 -182240.6  364481.3    194802 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.852e-01    0.4303
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                                          Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                             -2.805462  12.928231  -0.217 0.828206    
+# log_sl_                                  0.152628   0.008531  17.890  < 2e-16 ***
+# cos_ta_                                  0.010191   0.007933   1.285 0.198949    
+# crosses_minorTRUE                        0.552465   0.319454   1.729 0.083737 .  
+# crosses_majorTRUE                       -0.595107   0.358432  -1.660 0.096853 .  
+# crosses_localTRUE                       -0.276450   0.077844  -3.551 0.000383 ***
+# landuse_factorHuman-modified            -0.499699   0.048623 -10.277  < 2e-16 ***
+# landuse_factorDeciduous                  0.233602   0.058356   4.003 6.25e-05 ***
+# landuse_factorMixed                     -0.030514   0.036512  -0.836 0.403316    
+# landuse_factorOpen/shrub/bog            -0.041978   0.040286  -1.042 0.297416    
+# crosses_minorFALSE:factor(season)Summer  0.115324  17.845459   0.006 0.994844    
+# crosses_minorTRUE:factor(season)Summer  -1.353534  17.863601  -0.076 0.939602    
+# crosses_minorFALSE:factor(season)Winter -0.474857  19.036783  -0.025 0.980099    
+# crosses_minorTRUE:factor(season)Winter  -0.203714  19.042630  -0.011 0.991465    
+# crosses_majorTRUE:factor(season)Summer  -0.176694   0.543362  -0.325 0.745040    
+# crosses_majorTRUE:factor(season)Winter  -1.533119   0.697401  -2.198 0.027925 *  
+# crosses_localTRUE:factor(season)Summer  -0.090096   0.105826  -0.851 0.394569    
+# crosses_localTRUE:factor(season)Winter  -0.298422   0.114455  -2.607 0.009125 ** 
+
+# ---------------------------------------------------------- time 2: with crossings --------------------------------
+TMBStruc44 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    crosses_minor + crosses_major + crosses_local + 
+    landuse_factor +
+    factor(time_category):crosses_minor + factor(time_category):crosses_major + factor(time_category):crosses_local +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
 )
 
-summary(model_with_crossings3)
-AIC(model_with_crossings3)
-#                                                 coef  exp(coef)   se(coef)      z Pr(>|z|)    
-# crosses_majorTRUE                         -1.7844312  0.1678925  0.5912968 -3.018  0.00255 ** 
-# crosses_localTRUE                         -0.4038658  0.6677338  0.0751498 -5.374 7.69e-08 ***
-# log(sl_)                                   0.1998360  1.2212025  0.0083011 24.073  < 2e-16 ***
-# cos(ta_)                                   0.0007765  1.0007768  0.0126838  0.061  0.95118    
-# crosses_majorFALSE:factor(time_category)2 -1.2644871  0.2823841  0.7958028 -1.589  0.11207    
-# crosses_majorTRUE:factor(time_category)2          NA         NA  0.0000000     NA       NA    
-# crosses_majorFALSE:factor(time_category)3 -0.9137628  0.4010125  0.6707367 -1.362  0.17309    
-# crosses_majorTRUE:factor(time_category)3          NA         NA  0.0000000     NA       NA    
-# crosses_localTRUE:factor(time_category)2   0.3484134  1.4168178  0.1409373  2.472  0.01343 *  
-# crosses_localTRUE:factor(time_category)3  -0.0492546  0.9519388  0.0977224 -0.504  0.61424    
-# > AIC(model_with_crossings3)
-# [1] 84603.09
+TMBStruc44$parameters$theta[1] = log(1e3)  
 
+TMBStruc44$mapArg = list(theta = factor(c(NA, 1)))
 
+model_glmm44 <- glmmTMB:::fitTMB(TMBStruc44)
 
+summary(model_glmm44)
 
-
-
-
-
-
-
-
-
-# Check distribution of crossings by time category
-crossing_counts <- table(
-  steps3$crosses_major, 
-  steps3$time_category, 
-  steps3$case_
-)
-
-crossing_counts
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364525.7  364719.1 -182243.9  364487.7    194802 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev.
+#  str_ID (Intercept) 1.00e+06 1000.000
+#  id     (Intercept) 1.73e-01    0.416
+# 
+# Conditional model:
+#                                                   Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                      -2.493584  10.776294  -0.231   0.8170    
+# log_sl_                                           0.152652   0.008533  17.890  < 2e-16 ***
+# cos_ta_                                           0.009900   0.007932   1.248   0.2120    
+# crosses_minorTRUE                                -0.052670   0.419994  -0.125   0.9002    
+# crosses_majorTRUE                                -1.841373   0.589824  -3.122   0.0018 ** 
+# crosses_localTRUE                                -0.408808   0.074578  -5.482 4.22e-08 ***
+# landuse_factorHuman-modified                     -0.498646   0.048632 -10.254  < 2e-16 ***
+# landuse_factorDeciduous                           0.234875   0.058379   4.023 5.74e-05 ***
+# landuse_factorMixed                              -0.029332   0.036517  -0.803   0.4218    
+# landuse_factorOpen/shrub/bog                     -0.038921   0.040264  -0.967   0.3337    
+# crosses_minorFALSE:factor(time_category)Night    -0.739037  16.215502  -0.046   0.9636    
+# crosses_minorTRUE:factor(time_category)Night     -0.132759  16.223472  -0.008   0.9935    
+# crosses_minorFALSE:factor(time_category)Twilight -0.732099  23.523036  -0.031   0.9752    
+# crosses_minorTRUE:factor(time_category)Twilight   0.465979  23.535007   0.020   0.9842    
+# crosses_majorTRUE:factor(time_category)Night      0.923753   0.668422   1.382   0.1670    
+# crosses_majorTRUE:factor(time_category)Twilight   1.474727   0.814244   1.811   0.0701 .  
+# crosses_localTRUE:factor(time_category)Night     -0.050600   0.097499  -0.519   0.6038    
+# crosses_localTRUE:factor(time_category)Twilight   0.296533   0.141770   2.092   0.0365 *  
 
 
 
@@ -786,7 +847,7 @@ crossing_counts
 
 
 
-numeric_predictors <- steps3[, sapply(steps3, is.numeric)] %>% select(-"x1_", -"x2_", -"y1_", -"y2_", "burst_", "step_id_")
+numeric_predictors <- steps3 %>% select(-"x1_", -"x2_", -"y1_", -"y2_", "burst_", "step_id_")
 
 correlation_matrix <- cor(numeric_predictors, use = "complete.obs")
 
@@ -796,20 +857,28 @@ corrplot(correlation_matrix, method = "color", type = "upper",
          order = "hclust", tl.col = "black", tl.srt = 45,
          diag = FALSE) 
 
+
+
+library(polycor)
+
+
+steps3$crosses_major <- as.factor(steps3$crosses_major)
+steps3$crosses_minor <- as.factor(steps3$crosses_minor)
+steps3$crosses_local <- as.factor(steps3$crosses_local)
+steps3$time_category <- as.factor(steps3$time_category)
+steps3$season <- as.factor(steps3$season)
+
+vars_of_interest <- steps3[, c("landuse_factor", "major_d", "minor_d", "local_d", 
+                               "time_category", "season", 
+                               "crosses_major", "crosses_minor", "crosses_local")]
+
+
+het_cor <- hetcor(vars_of_interest)
+het_cor$correlations
+corrplot(het_cor$correlations, method = "color", 
+         type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

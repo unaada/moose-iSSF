@@ -13,7 +13,8 @@ sunlight <- getSunlightTimes(date = df$d_start, lon = 25.45, lat = 59.05,
 final <- left_join(df, sunlight, join_by("d_start" == "date") , relationship = "many-to-many", multiple = "first")
 
 
-#--- interpolation of crossing time----
+#------------------------------------------ interpolation of crossing time---------------------------------
+
 time <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\crossing_time\\intersections_distance.csv")
 
 # convert to time that is easy to do math operations
@@ -140,26 +141,29 @@ heatmap_data %>%
   scale_x_discrete(labels= c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept")) +
   theme_minimal()
 
-#--- plotting for cutoff point -------------------------
+#------------------------------------------------- plotting for cutoff point -------------------------
 
 # season classification
 tracks_seasonal <- tracks_filtered %>%
-  mutate(season = case_when(
-    month %in% c("nov","dec", "janv", "febr") ~ "Winter",
-    month %in% c("marts", "apr", "maijs") ~ "Spring",
-    month %in% c("jūn", "jūl", "aug") ~ "Summer"
+  mutate(
+    hour_half = hour + ifelse(minute(start) >= 30, 0.5, 0), 
+    
+    season = case_when(
+      month %in% c("nov","dec", "janv", "febr") ~ "Winter",
+      month %in% c("marts", "apr", "maijs") ~ "Spring",
+      month %in% c("jūn", "jūl", "aug") ~ "Summer"
   ))
 
-# hourly means by season
+# hourly medians by season
 seasonal_med <- tracks_seasonal %>%
-  group_by(hour, season) %>%
+  group_by(hour_half, season) %>%
   summarise(med_distance = median(distance_m), .groups = 'drop')
 
 # plot with seasonal lines
-ggplot(seasonal_med, aes(x = hour, y = med_distance)) +
+ggplot(seasonal_med, aes(x = hour_half, y = med_distance)) +
   geom_point() +
   geom_line() +
-  geom_hline(yintercept = 15, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = 18, color = "red", linetype = "dashed") +
   facet_wrap(~season, ncol = 2) +
   labs(x = "Hour of day",
        y = "Median step length, m") +
@@ -167,10 +171,24 @@ ggplot(seasonal_med, aes(x = hour, y = med_distance)) +
   scale_x_continuous(breaks = seq(0, 23, by = 4))
 
 
+# hourly means by season
+seasonal_mean <- tracks_seasonal %>%
+  group_by(hour_half, season) %>%
+  summarise(mean_distance = mean(distance_m), .groups = 'drop')
+
+# plot with seasonal lines
+ggplot(seasonal_mean, aes(x = hour_half, y = mean_distance)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 18, color = "red", linetype = "dashed") +
+  facet_wrap(~season, ncol = 2) +
+  labs(x = "Hour of day",
+       y = "Mean step length, m") +
+  theme_bw() +
+  scale_x_continuous(breaks = seq(0, 23, by = 4))
 
 
-
-# --- traffic heatmap -----------------------------
+# ---------------------------------------------------------- traffic heatmap -----------------------------
 
 
 traffic <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\crossing_time\\traffic_2069_2082.csv")
