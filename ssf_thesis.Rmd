@@ -847,6 +847,41 @@ model_glmm_nonlinear2 <- glmmTMB:::fitTMB(TMBStruc_nonlinear2)
 
 # Print summary
 summary(model_glmm_nonlinear2)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404790.4  405006.4 -202374.2  404748.4    216415 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.482e-01    0.3849
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                         Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                            -2.684616   7.132474  -0.376   0.7066    
+# log_sl_                                 0.134382   0.007897  17.017  < 2e-16 ***
+# cos_ta_                                 0.007335   0.007524   0.975   0.3296    
+# major_d                                 0.324106   0.137171   2.363   0.0181 *  
+# major_d_sq                             -0.190137   0.069193  -2.748   0.0060 ** 
+# minor_d                                 0.316897   0.130248   2.433   0.0150 *  
+# minor_d_sq                             -0.134348   0.067334  -1.995   0.0460 *  
+# local_d                                -0.009184   0.032835  -0.280   0.7797    
+# local_d_sq                             -0.037337   0.017472  -2.137   0.0326 *  
+# landuse_factorHuman-modified           -0.277006   0.046620  -5.942 2.82e-09 ***
+# landuse_factorDeciduous                 0.286928   0.053826   5.331 9.79e-08 ***
+# landuse_factorMixed                     0.064452   0.032955   1.956   0.0505 .  
+# landuse_factorOpen/shrub/bog            0.061845   0.039223   1.577   0.1148    
+# landuse_factorNew forest                0.366346   0.027368  13.386  < 2e-16 ***
+# major_d:factor(time_category3.1)Day    -0.318095   0.195995  -1.623   0.1046    
+# major_d_sq:factor(time_category3.1)Day -0.102807   0.097253  -1.057   0.2905    
+# minor_d:factor(time_category3.1)Day    -0.155323   0.185842  -0.836   0.4033    
+# minor_d_sq:factor(time_category3.1)Day  0.074790   0.093360   0.801   0.4231    
+# local_d:factor(time_category3.1)Day     0.234950   0.046482   5.055 4.31e-07 ***
+# local_d_sq:factor(time_category3.1)Day -0.045718   0.024198  -1.889   0.0588 . 
+
 # ----------------------------------------------- removing 1 by one for glmm3 ------------------------------
 TMBStruc3_remove1 <- glmmTMB(
   case_ ~ log_sl_ + cos_ta_ + 
