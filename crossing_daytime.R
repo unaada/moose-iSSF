@@ -149,8 +149,8 @@ tracks_seasonal <- tracks_filtered %>%
     hour_half = hour + ifelse(minute(start) >= 30, 0.5, 0), 
     
     season = case_when(
-      month %in% c("nov","dec", "janv", "febr") ~ "Winter",
-      month %in% c("marts", "apr", "maijs") ~ "Spring",
+      month %in% c("nov","dec", "janv", "febr", "marts") ~ "Winter",
+      month %in% c("apr", "maijs") ~ "Spring",
       month %in% c("jūn", "jūl", "aug") ~ "Summer"
   ))
 
@@ -237,5 +237,32 @@ traffic2 <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\
 
 
 
+# ------------------------------------------------------------------------ FINDING WHERE TO SPLIT THE SEASONS -------------------
 
 
+# Add a date column
+tracks_filtered$date <- as.Date(tracks_filtered$start)
+
+# Calculate daily average speeds
+daily_speeds <- aggregate(speed_kph ~ date, data=tracks_filtered, FUN=mean)
+
+# Add a day of year column for easier analysis
+daily_speeds$doy <- as.numeric(format(daily_speeds$date, "%j"))
+
+# Order by date
+daily_speeds <- daily_speeds[order(daily_speeds$date),]
+
+# Calculate 7-day moving average
+library(zoo)
+daily_speeds$ma7 <- rollmean(daily_speeds$speed_kph, 7, fill=NA)
+
+# Find where the moving average increases significantly
+# (e.g., where the 7-day average exceeds the overall average by 25%)
+overall_avg <- mean(daily_speeds$speed_kph, na.rm=TRUE)
+spring_idx <- which(daily_speeds$ma7 > overall_avg*1.2)[2]
+spring_cutoff_date <- daily_speeds$date[spring_idx]
+
+# Plot for visualization
+plot(daily_speeds$date, daily_speeds$speed_kph, type="l", 
+     xlab="Date", ylab="Speed (kph)")
+lines(daily_speeds$date, daily_speeds$ma7, col="blue", lwd=2)
