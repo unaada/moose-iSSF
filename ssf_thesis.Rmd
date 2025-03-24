@@ -446,19 +446,6 @@ steps3 <- steps2 %>%
   ) %>%
   dplyr::select(-sunrise, -sunset, -dawn, -dusk, -lon, -lat)
 
-#joining the categories
-# steps3 <- steps3 %>%
-#   mutate(
-#     sunrise = chron(times = format(sunrise, format = "%H:%M:%S")),
-#     sunset = chron(times = format(sunset, format = "%H:%M:%S")),
-#     dawn = chron(times = format(dawn, format = "%H:%M:%S")),
-#     dusk = chron(times = format(dusk, format = "%H:%M:%S")),
-#     
-#     time_category = case_when(
-#       time_of_day >= sunrise & time_of_day < sunset ~ 1, # day
-#       TRUE ~ 3), #night 
-#     ) %>%
-#   select(-sunrise, -sunset, -dawn, -dusk, -lon, -lat)
 
 # steffanie suggestion how to structure data for injection
 d.map <- data.frame(step_id_=unique(steps3$step_id_), 
@@ -2184,7 +2171,111 @@ ggplot(steps3_unscaled, aes(x = local_d_orig, fill = factor(case_))) +
 
 # --------------------------------------- visualisations -------------------------------------------------------------------
 
+# Function to create RSS plots for model_glmm3.0.1
+# Corrected function to create RSS plots for model_glmm3.0.1
+plot_time_rss <- function(model, data, road_type = "state", 
+                          max_dist = 2000, n_points = 200) {
+  
+  # Get scaling parameters
+  if(road_type == "state") {
+    var_name <- "state_d"
+    var_center <- attr(data$state_d, "scaled:center")
+    var_scale <- attr(data$state_d, "scaled:scale")
+  } else {
+    var_name <- "local_d"
+    var_center <- attr(data$local_d, "scaled:center")
+    var_scale <- attr(data$local_d, "scaled:scale")
+  }
+  
+  # Extract fixed effect coefficients
+  coefs <- fixef(model)$cond
+  
+  # Get main coefficient
+  main_coef_name <- var_name
+  main_coef <- coefs[main_coef_name]
+  
+  # Create sequence of original distance values
+  original_seq <- seq(0, max_dist, length.out = n_points)
+  
+  # Create dataframe to store results
+  results <- data.frame()
+  
+  # For each time category
+  for(time_cat in c("Day", "Night", "Twilight")) {
+    
+    # Create scaled distance sequence
+    scaled_seq <- (original_seq - var_center) / var_scale
+    
+    # Calculate effect size for this time category
+    if(time_cat == "Day") {
+      # Day is reference category, so just use main effect
+      effect_size <- main_coef
+    } else {
+      # For Night and Twilight, find the interaction term
+      interaction_name <- paste0(var_name, ":factor(time_category)", time_cat)
+      
+      # Check if interaction exists in model
+      if(interaction_name %in% names(coefs)) {
+        effect_size <- main_coef + coefs[interaction_name]
+      } else {
+        effect_size <- main_coef
+      }
+    }
+    
+    # Calculate linear predictor for the specific road effect
+    linear_pred <- scaled_seq * effect_size
+    
+    # Convert to relative selection strength
+    rss <- exp(linear_pred)
+    
+    # Add to results dataframe
+    cat_results <- data.frame(
+      distance = original_seq,
+      time_category = time_cat,
+      scaled_dist = scaled_seq,
+      linear_pred = linear_pred,
+      rss = rss
+    )
+    
+    # Add to results dataframe
+    results <- rbind(results, cat_results)
+  }
+  
+  # Scale RSS to be relative to minimum value (minimum = 1)
+  results$rss_relative <- results$rss / min(results$rss)
+  
+  # Create plot
+  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
+  
+  p <- ggplot(results, aes(x = distance, y = rss_relative, color = time_category)) +
+    geom_line(linewidth = 1.2) +
+    labs(x = paste0("Distance to ", road_label, " (m)"),
+         y = "Relative Selection Strength",
+         title = paste0("Moose Selection Relative to Distance from ", road_label),
+         subtitle = "By time of day",
+         color = "Time of Day") +
+    theme_minimal() +
+    theme(legend.position = "bottom",
+          panel.grid.minor = element_blank(),
+          panel.border = element_rect(fill = NA, color = "gray80"),
+          plot.title = element_text(face = "bold")) +
+    scale_color_manual(values = c("Day" = "#FFC107", "Night" = "#303F9F", "Twilight" = "#7B1FA2"))
+  
+  # Return both plot and data
+  return(list(plot = p, data = results))
+}
 
+# Create plots
+state_road_rss <- plot_time_rss(model_glmm3.0.1, steps3, road_type = "state")
+local_road_rss <- plot_time_rss(model_glmm3.0.1, steps3, road_type = "local")
+
+# Display plots
+state_road_rss$plot
+local_road_rss$plot
+
+# To arrange both plots side by side
+library(gridExtra)
+grid.arrange(state_road_rss$plot, local_road_rss$plot, ncol = 2)
 
 ```
 
