@@ -468,13 +468,8 @@ d.map <- data.frame(step_id_=unique(steps3$step_id_),
 steps3$str_ID <- d.map[match(steps3$step_id_, d.map$step_id_), "str_ID"]
 
 # Order data by stratum ID
-stephws3 <- steps3[order(steps3$str_ID),]
+steps3 <- steps3[order(steps3$str_ID),]
 
-```
-
-
-
-```{r base movement model}
 
 steps3$landuse_factor <- factor(steps3$landuse_total,
                                 labels = c("Human-modified", "Deciduous",
@@ -484,6 +479,15 @@ steps3$landuse_factor <- factor(steps3$landuse_total,
 steps3$time_category <- factor(steps3$time_category) %>% relevel(ref = "Day")
 
 steps3$season <- factor(steps3$season) %>% relevel(ref = "Spring")
+
+steps3_original <- steps3
+
+
+```
+
+
+
+```{r base movement model}
 
 
 # 1 = human-modified = agriculture and anthropogenic
@@ -1512,29 +1516,25 @@ summary(model_glmm3)
 
 
 # -------------------------------------------------- models without scaling ----------------
-# Create a copy of steps3 with unscaled variables
-steps3_unscaled <- steps3
 
-# Back-transform the scaled distance variables to their original values
-steps3_unscaled$major_d_orig <- steps3$major_d * attr(steps3$major_d, "scaled:scale") + 
-                              attr(steps3$major_d, "scaled:center")
-steps3_unscaled$minor_d_orig <- steps3$minor_d * attr(steps3$minor_d, "scaled:scale") + 
-                              attr(steps3$minor_d, "scaled:center")
-steps3_unscaled$local_d_orig <- steps3$local_d * attr(steps3$local_d, "scaled:scale") + 
-                              attr(steps3$local_d, "scaled:center")
+steps3_original$major_d <- steps3_original$major_d + 0.01
+steps3_original$minor_d <- steps3_original$minor_d + 0.01
+steps3_original$local_d <- steps3_original$local_d + 0.01
+steps3_original$state_d <- steps3_original$state_d + 0.01
+
+
+
+summary(steps3_original$state_d)
 
 
 TMBStruc_unscaled <- glmmTMB(
-  case_ ~ log_sl_ + cos_ta_ + 
-    major_d_orig + minor_d_orig + local_d_orig + 
+  case_ ~ log(sl_) + cos(ta_) + 
+    log(major_d) + log(minor_d) + log(local_d) + 
     landuse_factor +
-    factor(time_category):major_d_orig + 
-    factor(time_category):minor_d_orig + 
-    factor(time_category):local_d_orig +
     (1 | str_ID) +   
     (1 | id), 
   family = poisson,
-  data = steps3_unscaled,
+  data = steps3_original,
   doFit = FALSE
 )
 
@@ -1542,6 +1542,192 @@ TMBStruc_unscaled$parameters$theta[1] = log(1e3)
 TMBStruc_unscaled$mapArg = list(theta = factor(c(NA, 1)))
 
 model_glmm_unscaled <- glmmTMB:::fitTMB(TMBStruc_unscaled)
+
+summary(model_glmm_unscaled)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364213.0  364335.1 -182094.5  364189.0    194809 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1.000e+03
+#  id     (Intercept) 1.767e-03 4.203e-02
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -8.719916   7.538580  -1.157   0.2474    
+# log(sl_)                      0.145907   0.007935  18.388  < 2e-16 ***
+# cos(ta_)                      0.005925   0.012773   0.464   0.6427    
+# log(major_d)                  0.379797   0.055793   6.807 9.95e-12 ***
+# log(minor_d)                  0.259076   0.062244   4.162 3.15e-05 ***
+# log(local_d)                  0.027645   0.006793   4.070 4.71e-05 ***
+# landuse_factorHuman-modified -0.227838   0.048165  -4.730 2.24e-06 ***
+# landuse_factorDeciduous       0.311899   0.056685   5.502 3.75e-08 ***
+# landuse_factorMixed           0.084171   0.034586   2.434   0.0149 *  
+# landuse_factorOpen/shrub/bog  0.084088   0.040905   2.056   0.0398 *  
+# landuse_factorNew forest      0.418621   0.028681  14.596  < 2e-16 ***
+
+
+
+TMBStruc_unscaled1 <- glmmTMB(
+  case_ ~ log(sl_) + cos(ta_) + 
+    log(minor_d) + log(major_d) + log(local_d) + 
+    landuse_factor +
+    factor(time_category):log(minor_d) + factor(time_category):log(major_d) + factor(time_category):log(local_d) +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3_original,
+  doFit = FALSE
+)
+
+TMBStruc_unscaled1$parameters$theta[1] = log(1e3)  
+TMBStruc_unscaled1$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm_unscaled1 <- glmmTMB:::fitTMB(TMBStruc_unscaled1)
+
+summary(model_glmm_unscaled1)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364188.9  364372.1 -182076.4  364152.9    194803 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1.000e+03
+#  id     (Intercept) 1.614e-03 4.018e-02
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                                             Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                -8.827107   7.539078  -1.171  0.24166    
+# log(sl_)                                    0.147558   0.007945  18.572  < 2e-16 ***
+# cos(ta_)                                    0.006080   0.012775   0.476  0.63410    
+# log(minor_d)                                0.279987   0.097728   2.865  0.00417 ** 
+# log(major_d)                                0.395830   0.088305   4.483 7.38e-06 ***
+# log(local_d)                                0.075505   0.012896   5.855 4.78e-09 ***
+# landuse_factorHuman-modified               -0.230817   0.048274  -4.781 1.74e-06 ***
+# landuse_factorDeciduous                     0.314534   0.056701   5.547 2.90e-08 ***
+# landuse_factorMixed                         0.086503   0.034602   2.500  0.01242 *  
+# landuse_factorOpen/shrub/bog                0.087503   0.040917   2.139  0.03247 *  
+# landuse_factorNew forest                    0.420556   0.028692  14.657  < 2e-16 ***
+# log(minor_d):factor(time_category)Night    -0.026954   0.131876  -0.204  0.83805    
+# log(minor_d):factor(time_category)Twilight -0.050252   0.208371  -0.241  0.80943    
+# log(major_d):factor(time_category)Night     0.023361   0.121961   0.192  0.84810    
+# log(major_d):factor(time_category)Twilight -0.216888   0.150383  -1.442  0.14924    
+# log(local_d):factor(time_category)Night    -0.082118   0.015481  -5.304 1.13e-07 ***
+# log(local_d):factor(time_category)Twilight -0.008528   0.025553  -0.334  0.73858    
+
+
+
+
+
+
+TMBStruc_unscaled2 <- glmmTMB(
+  case_ ~ log(sl_) + cos(ta_) + 
+    log(state_d) + log(local_d) + 
+    landuse_factor +
+    factor(time_category):log(state_d)+ factor(time_category):log(local_d) +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3_original,
+  doFit = FALSE
+)
+
+TMBStruc_unscaled2$parameters$theta[1] = log(1e3)  
+TMBStruc_unscaled2$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm_unscaled2 <- glmmTMB:::fitTMB(TMBStruc_unscaled2)
+
+summary(model_glmm_unscaled2)
+
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364183.9  364336.5 -182076.9  364153.9    194806 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 2.011e-01    0.4485
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                                             Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                -6.686061   7.525441  -0.888   0.3743    
+# log(sl_)                                    0.148102   0.007945  18.641  < 2e-16 ***
+# cos(ta_)                                    0.006089   0.012775   0.477   0.6336    
+# log(state_d)                                0.425310   0.072090   5.900 3.64e-09 ***
+# log(local_d)                                0.075346   0.012886   5.847 4.99e-09 ***
+# landuse_factorHuman-modified               -0.232844   0.048198  -4.831 1.36e-06 ***
+# landuse_factorDeciduous                     0.314852   0.056677   5.555 2.77e-08 ***
+# landuse_factorMixed                         0.085999   0.034601   2.485   0.0129 *  
+# landuse_factorOpen/shrub/bog                0.089886   0.040903   2.198   0.0280 *  
+# landuse_factorNew forest                    0.420756   0.028691  14.665  < 2e-16 ***
+# log(state_d):factor(time_category)Night    -0.067921   0.096952  -0.701   0.4836    
+# log(state_d):factor(time_category)Twilight -0.204533   0.131558  -1.555   0.1200    
+# log(local_d):factor(time_category)Night    -0.081835   0.015474  -5.289 1.23e-07 ***
+# log(local_d):factor(time_category)Twilight -0.008628   0.025537  -0.338   0.7355 
+
+# remove 1 nonsignificant predictor
+
+TMBStruc_unscaled2.1 <- glmmTMB(
+  case_ ~ log(sl_) +
+    log(state_d) + log(local_d) + 
+    landuse_factor +
+    factor(time_category):log(state_d)+ factor(time_category):log(local_d) +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3_original,
+  doFit = FALSE
+)
+
+TMBStruc_unscaled2.1$parameters$theta[1] = log(1e3)  
+TMBStruc_unscaled2.1$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm_unscaled2.1 <- glmmTMB:::fitTMB(TMBStruc_unscaled2.1)
+
+summary(model_glmm_unscaled2.1)
+
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  364182.1  364324.6 -182077.0  364154.1    194807 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 2.008e-01    0.4481
+# Number of obs: 194821, groups:  str_ID, 17711; id, 8
+# 
+# Conditional model:
+#                                             Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                -6.678994   7.525403  -0.888   0.3748    
+# log(sl_)                                    0.148160   0.007944  18.650  < 2e-16 ***
+# log(state_d)                                0.424478   0.072023   5.894 3.78e-09 ***
+# log(local_d)                                0.075221   0.012879   5.841 5.20e-09 ***
+# landuse_factorHuman-modified               -0.232042   0.048161  -4.818 1.45e-06 ***
+# landuse_factorDeciduous                     0.314903   0.056668   5.557 2.74e-08 ***
+# landuse_factorMixed                         0.086003   0.034595   2.486   0.0129 *  
+# landuse_factorOpen/shrub/bog                0.089969   0.040896   2.200   0.0278 *  
+# landuse_factorNew forest                    0.420815   0.028688  14.669  < 2e-16 ***
+# log(state_d):factor(time_category)Night    -0.068000   0.096868  -0.702   0.4827    
+# log(state_d):factor(time_category)Twilight -0.203967   0.131476  -1.551   0.1208    
+# log(local_d):factor(time_category)Night    -0.081794   0.015470  -5.287 1.24e-07 ***
+# log(local_d):factor(time_category)Twilight -0.008597   0.025529  -0.337   0.7363  
+
+
+
+
+
 
 
 # Visualization
@@ -1853,6 +2039,36 @@ TMBStruc44.2$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm44.2 <- glmmTMB:::fitTMB(TMBStruc44.2)
 
 summary(model_glmm44.2)
+
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404796.9  404961.5 -202382.5  404764.9    216420 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev.
+#  str_ID (Intercept) 1.000e+06 1000.000
+#  id     (Intercept) 1.772e-01    0.421
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                                   Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                      -2.794748  10.143083  -0.276   0.7829    
+# log_sl_                                           0.145873   0.008074  18.066  < 2e-16 ***
+# cos_ta_                                           0.006888   0.007516   0.916   0.3594    
+# crosses_minorTRUE                                 0.456420   0.213455   2.138   0.0325 *  
+# crosses_majorTRUE                                -1.075378   0.243580  -4.415 1.01e-05 ***
+# crosses_localTRUE                                -0.370653   0.073157  -5.067 4.05e-07 ***
+# landuse_factorHuman-modified                     -0.323886   0.045812  -7.070 1.55e-12 ***
+# landuse_factorDeciduous                           0.280445   0.053763   5.216 1.82e-07 ***
+# landuse_factorMixed                               0.055532   0.032873   1.689   0.0912 .  
+# landuse_factorOpen/shrub/bog                      0.051238   0.039171   1.308   0.1909    
+# landuse_factorNew forest                          0.357247   0.027353  13.061  < 2e-16 ***
+# crosses_localFALSE:factor(time_category)Night    -0.502129  15.372757  -0.033   0.9739    
+# crosses_localTRUE:factor(time_category)Night     -0.544434  15.373030  -0.035   0.9717    
+# crosses_localFALSE:factor(time_category)Twilight -0.344569  22.568425  -0.015   0.9878    
+# crosses_localTRUE:factor(time_category)Twilight   0.013748  22.568822   0.001   0.9995 
 
 # -------------------------------------------------------------- crosses time with 2 road -------------------------
 
