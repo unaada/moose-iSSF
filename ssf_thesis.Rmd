@@ -2168,462 +2168,153 @@ corrplot(het_cor$correlations, method = "color",
          tl.col = "black", tl.srt = 45)
 
 
+
+
+
+
 ```
 
+```{r log ratio plot }
 
 
 
-```{r more visualisations}
-# 1. Basic calculation function for time-based models
-calculate_time_predictions <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters
-  var_center <- attr(data[[road_var]], "scaled:center")
-  var_scale <- attr(data[[road_var]], "scaled:scale")
-  
-  # Extract coefficients
-  coefs <- fixef(model)$cond
-  main_coef <- coefs[road_var]
-  
-  # Create distance sequence
-  dist_seq <- seq(0, max_dist, length.out = 100)
-  scaled_seq <- (dist_seq - var_center) / var_scale
-  
-  # For each time category
-  time_cats <- c("Day", "Night", "Twilight")
-  all_predictions <- data.frame()
-  
-  for (time_cat in time_cats) {
-    # Calculate effect for this time category
-    if (time_cat == "Day") {
-      effect <- main_coef
-    } else {
-      interaction_name <- paste0(road_var, ":factor(time_category)", time_cat)
-      if (interaction_name %in% names(coefs)) {
-        effect <- main_coef + coefs[interaction_name]
-      } else {
-        effect <- main_coef
-      }
-    }
-    
-    # Calculate linear predictor
-    linear_pred <- scaled_seq * effect
-    
-    # Calculate selection strength and probability
-    rss <- exp(linear_pred)
-    prob <- rss / (rss + 10)  # For 10 available steps
-    
-    # Store results
-    results <- data.frame(
-      distance = dist_seq,
-      rss = rss,
-      probability = prob,
-      time_category = time_cat
-    )
-    
-    all_predictions <- rbind(all_predictions, results)
-  }
-  
-  return(all_predictions)
-}
+# prepare data with used/available points and distance bands
+points_data <- steps3_original %>%
+  select(time_category, state_d, case_) %>%
+  mutate(point_type = ifelse(case_ == TRUE, "Used", "Available"))
 
-# 2. Simple plot function for time-based models
-plot_time_predictions <- function(predictions, road_type = "state", plot_type = "probability") {
-  # Set up plot parameters
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
-  time_colors <- c("Day" = "#FFC107", "Night" = "#303F9F", "Twilight" = "#7B1FA2")
-  
-  # Create the right type of plot
-  if (plot_type == "probability") {
-    y_var <- "probability"
-    y_label <- "Selection Probability"
-    title <- paste0("Moose Selection Probability vs. Distance from ", road_label)
-    
-    p <- ggplot(predictions, aes(x = distance, y = probability, color = time_category)) +
-      geom_line(size = 1.2) +
-      geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
-      annotate("text", x = 100, y = 1/11 * 1.05, 
-               label = "Baseline (1/11)", hjust = 0, color = "gray50", size = 3)
-    
-  } else {  # RSS plot
-    y_var <- "rss"
-    y_label <- "Relative Selection Strength"
-    title <- paste0("Moose Selection Relative to Distance from ", road_label)
-    
-    # Normalize to distance = 0 for each time category
-    predictions <- predictions %>%
-      group_by(time_category) %>%
-      mutate(rss_relative = rss / rss[distance == min(distance)]) %>%
-      ungroup()
-    
-    p <- ggplot(predictions, aes(x = distance, y = rss_relative, color = time_category)) +
-      geom_line(size = 1.2)
-  }
-  
-  # Finish plot formatting
-  p <- p +
-    labs(x = paste0("Distance to ", road_label, " (m)"),
-         y = y_label,
-         title = title,
-         subtitle = "By time of day",
-         color = "Time of Day") +
-    theme_minimal() +
-    theme(
-      legend.position = "bottom",
-      panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "gray80"),
-      plot.title = element_text(face = "bold")
-    ) +
-    scale_color_manual(values = time_colors)
-  
-  return(p)
-}
+# create distance bands from roads
+points_data$dist_band <- cut(points_data$state_d, 
+                             breaks = c(-Inf, 60, 250, 500, 1000, 1500, Inf),
+                             labels = c("<60m", "60-250m", "250-500m", "500-1000m", "1000-1500m", ">1500m"))
 
-# 3. Basic calculation function for season-based models
-calculate_season_predictions <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters
-  var_center <- attr(data[[road_var]], "scaled:center")
-  var_scale <- attr(data[[road_var]], "scaled:scale")
-  
-  # Extract coefficients
-  coefs <- fixef(model)$cond
-  main_coef <- coefs[road_var]
-  
-  # Create distance sequence
-  dist_seq <- seq(0, max_dist, length.out = 100)
-  scaled_seq <- (dist_seq - var_center) / var_scale
-  
-  # For each season category
-  season_cats <- c("Spring", "Summer", "Winter")
-  all_predictions <- data.frame()
-  
-  for (season_cat in season_cats) {
-    # Calculate effect for this season
-    if (season_cat == "Spring") {
-      effect <- main_coef
-    } else {
-      interaction_name <- paste0(road_var, ":factor(season)", season_cat)
-      if (interaction_name %in% names(coefs)) {
-        effect <- main_coef + coefs[interaction_name]
-      } else {
-        effect <- main_coef
-      }
-    }
-    
-    # Calculate linear predictor
-    linear_pred <- scaled_seq * effect
-    
-    # Calculate selection strength and probability
-    rss <- exp(linear_pred)
-    prob <- rss / (rss + 10)  # For 10 available steps
-    
-    # Store results
-    results <- data.frame(
-      distance = dist_seq,
-      rss = rss,
-      probability = prob,
-      season = season_cat
-    )
-    
-    all_predictions <- rbind(all_predictions, results)
-  }
-  
-  return(all_predictions)
-}
+# count observations in each group and calculate percentages
+count_df <- as.data.frame(table(
+  points_data$time_category, 
+  points_data$point_type, 
+  points_data$dist_band
+))
+names(count_df) <- c("time_category", "point_type", "dist_band", "count")
 
-# 4. Simple plot function for season-based models
-plot_season_predictions <- function(predictions, road_type = "state", plot_type = "probability") {
-  # Set up plot parameters
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
-  season_colors <- c("Spring" = "#4CAF50", "Summer" = "#FF9800", "Winter" = "#2196F3")
-  
-  # Create the right type of plot
-  if (plot_type == "probability") {
-    y_var <- "probability"
-    y_label <- "Selection Probability"
-    title <- paste0("Moose Selection Probability vs. Distance from ", road_label)
-    
-    p <- ggplot(predictions, aes(x = distance, y = probability, color = season)) +
-      geom_line(size = 1.2) +
-      geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
-      annotate("text", x = 100, y = 1/11 * 1.05, 
-               label = "Baseline (1/11)", hjust = 0, color = "gray50", size = 3)
-    
-  } else {  # RSS plot
-    y_var <- "rss"
-    y_label <- "Relative Selection Strength"
-    title <- paste0("Moose Selection Relative to Distance from ", road_label)
-    
-    # Normalize to distance = 0 for each season
-    predictions <- predictions %>%
-      group_by(season) %>%
-      mutate(rss_relative = rss / rss[distance == min(distance)]) %>%
-      ungroup()
-    
-    p <- ggplot(predictions, aes(x = distance, y = rss_relative, color = season)) +
-      geom_line(size = 1.2)
-  }
-  
-  # Finish plot formatting
-  p <- p +
-    labs(x = paste0("Distance to ", road_label, " (m)"),
-         y = y_label,
-         title = title,
-         subtitle = "By season",
-         color = "Season") +
-    theme_minimal() +
-    theme(
-      legend.position = "bottom",
-      panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "gray80"),
-      plot.title = element_text(face = "bold")
-    ) +
-    scale_color_manual(values = season_colors)
-  
-  return(p)
-}
 
-# 5. Basic calculation function for models without interactions
-calculate_basic_predictions <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters
-  var_center <- attr(data[[road_var]], "scaled:center")
-  var_scale <- attr(data[[road_var]], "scaled:scale")
-  
-  # Extract coefficients
-  coefs <- fixef(model)$cond
-  effect <- coefs[road_var]
-  
-  # Create distance sequence
-  dist_seq <- seq(0, max_dist, length.out = 100)
-  scaled_seq <- (dist_seq - var_center) / var_scale
-  
-  # Calculate linear predictor
-  linear_pred <- scaled_seq * effect
-  
-  # Calculate selection strength and probability
-  rss <- exp(linear_pred)
-  prob <- rss / (rss + 10)  # For 10 available steps
-  
-  # Store results
-  results <- data.frame(
-    distance = dist_seq,
-    rss = rss,
-    probability = prob
+# > count_df
+#    time_category point_type  dist_band count
+# 1            Day  Available       <60m   450
+# 2          Night  Available       <60m   733
+# 3       Twilight  Available       <60m   134
+# 4            Day       Used       <60m     7
+# 5          Night       Used       <60m    47
+# 6       Twilight       Used       <60m     2
+
+
+#    time_category point_type  dist_band count
+# 1            Day  Available      <100m   824
+# 2          Night  Available      <100m  1179
+# 3       Twilight  Available      <100m   253
+# 4            Day       Used      <100m    36
+# 5          Night       Used      <100m    79
+# 6       Twilight       Used      <100m    15
+
+
+# add sample sizes to data for text annotation
+used_counts <- subset(count_df, point_type == "Used")
+names(used_counts)[4] <- "sample_size"
+
+# calculate proportions and reshape
+props_df <- count_df %>%
+  group_by(time_category, point_type) %>%
+  mutate(prop = count/sum(count)) %>%
+  select(-count) %>%
+  pivot_wider(names_from = point_type, values_from = prop)
+
+# calculate selection ratio and simple approximate CIs
+ratio_df <- props_df %>%
+  mutate(
+    ratio = Used / Available,
+    selection_strength = log(ratio),
+    
+    #  approximate confidence intervals using standard error of log ratio
+    # as in the delta method for variance of log(p1/p2)
+    n_used = sum(used_counts$sample_size[used_counts$time_category == time_category]),
+    n_avail = n_used * 10,  # assuming 10 available points per used point
+    
+    se_used = sqrt(Used * (1-Used) / n_used),
+    se_avail = sqrt(Available * (1-Available) / n_avail),
+    
+    # standard error of log ratio
+    se_logratio = sqrt((se_used/Used)^2 + (se_avail/Available)^2),
+    
+    # 95% confidence intervals
+    ci_lower = selection_strength - 1.96 * se_logratio,
+    ci_upper = selection_strength + 1.96 * se_logratio
   )
-  
-  return(results)
-}
 
-# 6. Simple plot function for models without interactions
-plot_basic_predictions <- function(predictions, road_type = "state", plot_type = "probability") {
-  # Set up plot parameters
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
-  
-  # Create the right type of plot
-  if (plot_type == "probability") {
-    y_var <- "probability"
-    y_label <- "Selection Probability"
-    title <- paste0("Moose Selection Probability vs. Distance from ", road_label)
-    
-    p <- ggplot(predictions, aes(x = distance, y = probability)) +
-      geom_line(size = 1.2, color = "#1976D2") +
-      geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
-      annotate("text", x = 100, y = 1/11 * 1.05, 
-               label = "Baseline (1/11)", hjust = 0, color = "gray50", size = 3)
-    
-  } else {  # RSS plot
-    y_var <- "rss"
-    y_label <- "Relative Selection Strength"
-    title <- paste0("Moose Selection Relative to Distance from ", road_label)
-    
-    # Normalize to distance = 0
-    predictions$rss_relative <- predictions$rss / predictions$rss[1]
-    
-    p <- ggplot(predictions, aes(x = distance, y = rss_relative)) +
-      geom_line(size = 1.2, color = "#1976D2")
-  }
-  
-  # Finish plot formatting
-  p <- p +
-    labs(x = paste0("Distance to ", road_label, " (m)"),
-         y = y_label,
-         title = title) +
-    theme_minimal() +
-    theme(
-      panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "gray80"),
-      plot.title = element_text(face = "bold")
-    )
-  
-  return(p)
-}
+# merge with sample sizes
+ratio_df <- merge(ratio_df, 
+                 used_counts[, c("time_category", "dist_band", "sample_size")],
+                 by = c("time_category", "dist_band"))
 
-
-# 1. Time-based model plots (model_glmm3.0.1)
-# State roads
-state_time_preds <- calculate_time_predictions(model_glmm3.0.1, steps3, "state_d")
-state_time_plot <- plot_time_predictions(state_time_preds, "state", "probability")
-state_time_plot
-
-# Local roads 
-local_time_preds <- calculate_time_predictions(model_glmm3.0.1, steps3, "local_d")
-local_time_plot <- plot_time_predictions(local_time_preds, "local", "probability")
-local_time_plot
-
-# 2. Season-based model plots (model_glmm2.0)
-# State roads
-state_season_preds <- calculate_season_predictions(model_glmm2.0.2, steps3, "state_d")
-state_season_plot <- plot_season_predictions(state_season_preds, "state", "probability")
-state_season_plot
-
-# Local roads
-local_season_preds <- calculate_season_predictions(model_glmm2.0.2, steps3, "local_d")
-local_season_plot <- plot_season_predictions(local_season_preds, "local", "probability")
-local_season_plot
-
-# 3. Basic model plots (model_glmm1.1.1)
-# State roads
-state_basic_preds <- calculate_basic_predictions(model_glmm1.1.1, steps3, "state_d")
-state_basic_plot <- plot_basic_predictions(state_basic_preds, "state", "probability")
-state_basic_plot
-
-# Local roads
-local_basic_preds <- calculate_basic_predictions(model_glmm1.1.1, steps3, "local_d")
-local_basic_plot <- plot_basic_predictions(local_basic_preds, "local", "probability")
-local_basic_plot
-
-# You can also create RSS plots by changing the plot_type parameter
-state_time_rss <- plot_time_predictions(state_time_preds, "state", "rss")
-state_time_rss
+# create the plot
+ggplot(ratio_df, aes(x = dist_band, y = selection_strength, fill = time_category)) +
+  geom_col(position = position_dodge(width = 0.9), alpha = 0.7) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), 
+                position = position_dodge(width = 0.9),
+                width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Road Distance Selection Strength by Time of Day",
+       subtitle = "Values above 0 indicate selection, below 0 indicate avoidance",
+       x = "Distance from State Roads", 
+       y = "Log Ratio (Used:Available)",
+       caption = "Error bars show approximate 95% confidence intervals") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 
-# Check if your model and data objects are still valid
-class(model_glmm3.0.1)
-class(steps3)
+# plot scale issue fixed
+# Modify your plot to limit the y-axis and add inset for full scale
+ggplot(ratio_df, aes(x = dist_band, y = selection_strength, fill = time_category)) +
+  geom_col(position = position_dodge(width = 0.9), alpha = 0.7) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), 
+                position = position_dodge(width = 0.9),
+                width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Road Distance Selection Strength by Time of Day",
+       subtitle = "Values above 0 indicate selection, below 0 indicate avoidance",
+       x = "Distance from State Roads", 
+       y = "Log Ratio (Used:Available)",
+       caption = "Error bars show approximate 95% confidence intervals") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  # Set limits to see detail in the important range
+  coord_cartesian(ylim = c(-1.2, 0.5)) +
+  # Add text annotation about truncated values
+  annotate("text", x = 1, y = -0.9, 
+           label = "Note: Values for 0-50m are truncated\nDay: -1.9, Night: -0.8, Twilight: -1.9",
+           hjust = 0, size = 3)
 
-# Check if state_d is properly scaled
-head(steps3$state_d)
-attributes(steps3$state_d)  # Should show scaled:center and scaled:scale
+
+# Line chart version
+ggplot(ratio_df, aes(x = dist_band, y = selection_strength, 
+                    color = time_category, group = time_category)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Road Distance Selection Strength by Time of Day",
+       subtitle = "Values above 0 indicate selection, below 0 indicate avoidance",
+       x = "Distance from State Roads", 
+       y = "Log Ratio (Used:Available)",
+       caption = "Error bars show approximate 95% confidence intervals") +
+  theme_minimal()
+
+
+
 
 ```
 
 
 
-```{r checking CI ways}
-
-# Add confidence intervals to the calculation function
-calculate_time_predictions_with_ci <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters
-  var_center <- attr(data[[road_var]], "scaled:center")
-  var_scale <- attr(data[[road_var]], "scaled:scale")
-  
-  # Extract coefficients and variance-covariance matrix
-  coefs <- fixef(model)$cond
-  vcov_matrix <- vcov(model)$cond
-  main_coef <- coefs[road_var]
-  main_se <- sqrt(diag(vcov_matrix)[road_var])
-  
-  # Create distance sequence
-  dist_seq <- seq(0, max_dist, length.out = 100)
-  scaled_seq <- (dist_seq - var_center) / var_scale
-  
-  # For each time category
-  time_cats <- c("Day", "Night", "Twilight")
-  all_predictions <- data.frame()
-  
-  for (time_cat in time_cats) {
-    # Calculate effect and SE for this time category
-    if (time_cat == "Day") {
-      effect <- main_coef
-      effect_se <- main_se
-    } else {
-      interaction_name <- paste0(road_var, ":factor(time_category)", time_cat)
-      if (interaction_name %in% names(coefs)) {
-        effect <- main_coef + coefs[interaction_name]
-        # Calculate combined SE
-        interaction_se <- sqrt(diag(vcov_matrix)[interaction_name])
-        # Check if covariance is available
-        if(road_var %in% rownames(vcov_matrix) && interaction_name %in% colnames(vcov_matrix)) {
-          covar <- vcov_matrix[road_var, interaction_name]
-        } else {
-          covar <- 0
-        }
-        effect_se <- sqrt(main_se^2 + interaction_se^2 + 2*covar)
-      } else {
-        effect <- main_coef
-        effect_se <- main_se
-      }
-    }
-    
-    # Calculate linear predictor and CIs
-    linear_pred <- scaled_seq * effect
-    linear_ci_lower <- linear_pred - 1.96 * (abs(scaled_seq) * effect_se)
-    linear_ci_upper <- linear_pred + 1.96 * (abs(scaled_seq) * effect_se)
-    
-    # Calculate selection strength and probability with CIs
-    rss <- exp(linear_pred)
-    rss_lower <- exp(linear_ci_lower)
-    rss_upper <- exp(linear_ci_upper)
-    
-    prob <- rss / (rss + 10)
-    prob_lower <- rss_lower / (rss_lower + 10)
-    prob_upper <- rss_upper / (rss_upper + 10)
-    
-    # Store results
-    results <- data.frame(
-      distance = dist_seq,
-      rss = rss,
-      rss_lower = rss_lower,
-      rss_upper = rss_upper,
-      probability = prob,
-      prob_lower = prob_lower,
-      prob_upper = prob_upper,
-      time_category = time_cat
-    )
-    
-    all_predictions <- rbind(all_predictions, results)
-  }
-  
-  return(all_predictions)
-}
-
-# Faceted plot - one panel per time period
-plot_time_predictions_facet <- function(predictions, road_type = "state") {
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
-  time_colors <- c("Day" = "#FFC107", "Night" = "#303F9F", "Twilight" = "#7B1FA2")
-  
-  p <- ggplot(predictions, aes(x = distance, y = probability, color = time_category)) +
-    geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper, fill = time_category), 
-                alpha = 0.3, color = NA) +
-    geom_line(size = 1.2) +
-    geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
-    facet_wrap(~ time_category, nrow = 1) +
-    labs(x = paste0("Distance to ", road_label, " (m)"),
-         y = "Selection Probability",
-         title = paste0("Moose Selection Probability vs. Distance from ", road_label),
-         subtitle = "With 95% confidence intervals") +
-    theme_minimal() +
-    theme(
-      legend.position = "none",
-      panel.grid.minor = element_blank(),
-      strip.text = element_text(size = 12, face = "bold"),
-      plot.title = element_text(face = "bold")
-    ) +
-    scale_color_manual(values = time_colors) +
-    scale_fill_manual(values = time_colors)
-  
-  return(p)
-}
-
-
-# Calculate predictions with confidence intervals
-state_preds_ci <- calculate_time_predictions_with_ci(model_glmm3.0.1, steps3, "state_d")
-
-plot2 <- plot_time_predictions_facet(state_preds_ci, "state")
-
-plot2
-
-```
 
 
 
@@ -3043,155 +2734,74 @@ local_basic_plot
 
 
 ```{r prediction plots}
-library(glmmTMB)
-library(ggplot2)
-library(dplyr)
-library(scales)
 
-# Function to create prediction curves specifically for model_glmm3.0.1
-create_prediction_curves <- function(model, data, variable = "state_d", 
-                                    landuse = "Coniferous", log_sl_val = 0) {
+
+library(ggplot2)
+
+# Prediction function for state roads across all time periods
+create_time_predictions <- function(model_object, state_d_center, state_d_scale, max_dist = 2500) {
+  # Get coefficients directly from the model object (based on your output)
+  beta_state_d <- model_object$fit$par[3]  # State_d base effect (day)
+  beta_night_interaction <- model_object$fit$par[10]  # Night interaction 
+  beta_twilight_interaction <- model_object$fit$par[11]  # Twilight interaction
   
-  # First check if we're using the correct model type
-  if (!inherits(model, "glmmTMB")) {
-    # If we have a model that was created with doFit = FALSE
-    # We need to fit it first
-    if (is.list(model) && "fit" %in% names(model)) {
-      # This is a partially fitted glmmTMB model
-      # We need to use the parameters that were already estimated
-      
-      # Create a new prediction function
-      predict_func <- function(newdata) {
-        # Get fixed effects coefficients
-        beta <- model$fit$par[1:length(model$parameters$beta)]
-        
-        # Create the linear predictor manually
-        X <- model_matrix(model, newdata)
-        
-        # Calculate linear predictor
-        eta <- as.numeric(X %*% beta)
-        
-        # Apply link function (log for Poisson)
-        return(eta)
-      }
-    } else {
-      stop("Model must be a fitted glmmTMB object or a list with fit components")
-    }
-  } else {
-    # If we have a proper glmmTMB object, we can use predict directly
-    predict_func <- function(newdata) {
-      predict(model, newdata = newdata, re.form = NA, type = "link")
-    }
-  }
+  # Create distance sequence in original units
+  distances <- seq(0, max_dist, length.out = 100)
   
-  # Get range of the variable to predict along
-  var_range <- range(data[[variable]], na.rm = TRUE)
+  # Scale the distances to match your model's scaling
+  scaled_distances <- (distances - state_d_center) / state_d_scale
   
-  # Create sequence of values for x-axis
-  pred_values <- seq(var_range[1], var_range[2], length.out = 100)
+  # Calculate effects for each time period
+  day_effect <- beta_state_d
+  night_effect <- beta_state_d + beta_night_interaction
+  twilight_effect <- beta_state_d + beta_twilight_interaction
   
-  # Get scaled parameters to back-transform to original scale
-  if(variable == "state_d") {
-    center <- attr(data$state_d, "scaled:center")
-    scale <- attr(data$state_d, "scaled:scale")
-    orig_values <- pred_values * scale + center
-  } else if(variable == "local_d") {
-    center <- attr(data$local_d, "scaled:center")
-    scale <- attr(data$local_d, "scaled:scale")
-    orig_values <- pred_values * scale + center
-  } else {
-    orig_values <- pred_values
-  }
-  
-  # Create prediction data frames for each time category
-  time_categories <- c("Day", "Night", "Twilight")
-  
-  # Store results
+  # Create empty data frame to store all predictions
   all_predictions <- data.frame()
   
-  # Create predictions for each time category
-  for(time_cat in time_categories) {
-    # Create new data frame for predictions
-    if(variable == "state_d") {
-      newdata <- data.frame(
-        log_sl_ = log_sl_val,
-        state_d = pred_values,
-        local_d = mean(data$local_d, na.rm = TRUE),
-        landuse_factor = factor(landuse, levels = levels(data$landuse_factor)),
-        "factor(time_category)" = factor(time_cat, levels = levels(data$`factor(time_category)`))
-      )
-    } else if(variable == "local_d") {
-      newdata <- data.frame(
-        log_sl_ = log_sl_val,
-        state_d = mean(data$state_d, na.rm = TRUE),
-        local_d = pred_values,
-        landuse_factor = factor(landuse, levels = levels(data$landuse_factor)),
-        "factor(time_category)" = factor(time_cat, levels = levels(data$`factor(time_category)`))
-      )
+  # For each time category
+  for (time_cat in c("Day", "Night", "Twilight")) {
+    # Select the appropriate effect
+    if (time_cat == "Day") {
+      effect <- day_effect
+    } else if (time_cat == "Night") {
+      effect <- night_effect
+    } else { # Twilight
+      effect <- twilight_effect
     }
     
-    # Make predictions on the link scale (log scale for Poisson)
-    preds <- predict_func(newdata)
+    # Calculate linear predictor (log scale)
+    linear_pred <- scaled_distances * effect
     
-    # Convert from log to response scale
-    probs <- exp(preds)
+    # Convert to response scale (exp for Poisson)
+    response <- exp(linear_pred)
     
-    # Normalize to probability scale (divide by max value)
-    max_prob <- max(probs)
-    probs_norm <- probs / max_prob
+    # Normalize within each time period
+    relative_prob <- response / max(response)
     
-    # Combine results
-    result <- data.frame(
-      distance = orig_values,
-      probability = probs_norm,
-      time_category = time_cat,
-      variable = variable
+    # Create data frame for this time period
+    time_data <- data.frame(
+      distance = distances,
+      probability = relative_prob,
+      time_category = time_cat
     )
     
-    all_predictions <- rbind(all_predictions, result)
+    # Add to the combined data frame
+    all_predictions <- rbind(all_predictions, time_data)
   }
   
-  return(all_predictions)
-}
-
-# Helper function to create model matrix
-model_matrix <- function(model, newdata) {
-  # Extract terms and contrasts from the model
-  terms <- terms(model$fr)
-  contrasts <- model$contrasts
+  # Convert time_category to factor with desired order
+  all_predictions$time_category <- factor(all_predictions$time_category, 
+                                        levels = c("Day", "Night", "Twilight"))
   
-  # Create the model matrix
-  X <- model.matrix(delete.response(terms), newdata, contrasts.arg = contrasts)
-  
-  # Make sure we have all necessary columns
-  # If columns are missing, add them with zeros
-  required_cols <- colnames(model$condList$X)
-  missing_cols <- setdiff(required_cols, colnames(X))
-  
-  if (length(missing_cols) > 0) {
-    X_add <- matrix(0, nrow = nrow(X), ncol = length(missing_cols))
-    colnames(X_add) <- missing_cols
-    X <- cbind(X, X_add)
-    # Make sure columns are in correct order
-    X <- X[, required_cols]
-  }
-  
-  return(X)
-}
-
-# Example usage:
-# state_preds <- create_prediction_curves(model_glmm3.0.1, steps3, variable = "state_d", landuse = "Coniferous")
-# local_preds <- create_prediction_curves(model_glmm3.0.1, steps3, variable = "local_d", landuse = "Coniferous")
-
-# Function to create plots
-plot_predictions <- function(all_preds) {
-  ggplot(all_preds, aes(x = distance, y = probability, color = time_category, linetype = time_category)) +
-    geom_line(size = 1) +
-    facet_wrap(~road_type, scales = "free_x") +
+  # Create plot
+  p <- ggplot(all_predictions, aes(x = distance, y = probability, 
+                                  color = time_category, linetype = time_category)) +
+    geom_line(size = 1.2) +
     scale_color_manual(values = c("Day" = "#FFC107", "Night" = "#3F51B5", "Twilight" = "#9C27B0")) +
     scale_linetype_manual(values = c("Day" = "solid", "Night" = "dashed", "Twilight" = "dotted")) +
     labs(
-      title = "Predicted Probability of Wolf Presence by Distance to Roads",
+      title = "Moose Selection Probability vs. Distance from State Roads",
       x = "Distance (m)",
       y = "Relative Probability",
       color = "Time of Day",
@@ -3201,81 +2811,27 @@ plot_predictions <- function(all_preds) {
     theme(
       legend.position = "bottom",
       panel.grid.minor = element_blank(),
-      strip.background = element_rect(fill = "gray90"),
-      strip.text = element_text(face = "bold")
+      plot.title = element_text(face = "bold")
     )
+  
+  # Return both the data and the plot
+  return(list(data = all_predictions, plot = p))
 }
 
-# Full example of creating both prediction sets and plotting them
-create_and_plot_predictions <- function(model, data) {
-  # Create prediction curves for state_d (state highway distance)
-  state_preds <- create_prediction_curves(model, data, 
-                                         variable = "state_d", 
-                                         landuse = "Coniferous")
-  
-  # Create prediction curves for local_d (local road distance)
-  local_preds <- create_prediction_curves(model, data, 
-                                         variable = "local_d", 
-                                         landuse = "Coniferous")
-  
-  # Combine predictions
-  all_preds <- rbind(
-    state_preds %>% mutate(road_type = "State Highway"),
-    local_preds %>% mutate(road_type = "Local Road")
-  )
-  
-  # Plot the results
-  plot_predictions(all_preds)
-}
+# Example usage:
+# These are the scaling parameters from your model
+state_d_center <- 1895
+state_d_scale <- 1176
 
-# To create separate plots for different landuse types
-create_landuse_plots <- function(model, data) {
-  landuse_types <- levels(data$landuse_factor)
-  plot_list <- list()
-  
-  for(landuse in landuse_types) {
-    # State distance
-    state_preds <- create_prediction_curves(model, data, 
-                                          variable = "state_d", 
-                                          landuse = landuse)
-    
-    # Plot
-    p <- ggplot(state_preds, aes(x = distance, y = probability, color = time_category, linetype = time_category)) +
-      geom_line(size = 1) +
-      scale_color_manual(values = c("Day" = "#FFC107", "Night" = "#3F51B5", "Twilight" = "#9C27B0")) +
-      scale_linetype_manual(values = c("Day" = "solid", "Night" = "dashed", "Twilight" = "dotted")) +
-      labs(
-        title = paste("Predicted Probability by Distance to State Highway -", landuse),
-        x = "Distance (m)",
-        y = "Relative Probability",
-        color = "Time of Day",
-        linetype = "Time of Day"
-      ) +
-      theme_minimal() +
-      theme(legend.position = "bottom")
-    
-    plot_list[[landuse]] <- p
-  }
-  
-  return(plot_list)
-}
+# Generate the prediction and plot
+result <- create_time_predictions(model_glmm3.0.1, state_d_center, state_d_scale)
 
-# Example of creating curves with your model:
-# 
-# # Create and plot predictions
-# plot_obj <- create_and_plot_predictions(model_glmm3.0.1, steps3)
+result$plot
 
-# Warning: Unknown or uninitialised column: `factor(time_category)`.Error in EvalADFunObject(ADFun, theta, order = order, hessiancols = cols,  : 
-#   Wrong parameter length.
-# 
-# # Display the plot
-# print(plot_obj)
-# 
-# # Create landuse-specific plots
-# landuse_plots <- create_landuse_plots(model_glmm3.0.1, steps3)
-# 
-# # View individual plots
-# print(landuse_plots[["Coniferous"]])
+# Display the plot (in R, you would just use: print(result$plot))
+
+# Access the data if needed
+# head(result$data)
 
 ```
 
