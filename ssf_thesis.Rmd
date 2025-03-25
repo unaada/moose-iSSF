@@ -248,6 +248,8 @@ all_moose <- map2_dfr(dat3$dat.filtered, dat3$id, ~{
 burst_id_map <- as.data.frame(all_moose) %>%
   dplyr::select(id, burst_) %>%
   distinct()
+
+set.seed(123) 
 # regular generation of steps
 steps <- all_moose %>%
   steps_by_burst() %>%
@@ -685,98 +687,6 @@ summary(model_glmm_state.1)
 # state_d:landuse_factorNew forest      0.014118   0.028969   0.487   0.6260  
 
 
-# ----------------------------------------- basic with quadratic terms -------------------------------
-
-steps3$state_d_sq <- steps3$state_d^2
-steps3$local_d_sq <- steps3$local_d^2
-
-TMBStruc1.2 <- glmmTMB(
-  case_ ~ log_sl_ + cos_ta_ + 
-    state_d + state_d_sq +
-    local_d + local_d_sq +
-    landuse_factor +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3,
-  doFit = FALSE
-)
-
-TMBStruc1.2$parameters$theta[1] = log(1e3)  
-TMBStruc1.2$mapArg = list(theta = factor(c(NA, 1)))
-model_glmm1.2 <- glmmTMB:::fitTMB(TMBStruc1.2)
-summary(model_glmm1.2)
-
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  404816.1  404949.8 -202395.0  404790.1    216423 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 1.464e-01    0.3826
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
-# 
-# Conditional model:
-#                               Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -2.915826   7.132236  -0.409   0.6827    
-# log_sl_                       0.133659   0.007890  16.940  < 2e-16 ***
-# cos_ta_                       0.007065   0.007520   0.940   0.3475    
-# state_d                       0.459203   0.080473   5.706 1.15e-08 ***
-# state_d_sq                   -0.096926   0.041649  -2.327   0.0200 *  
-# local_d                       0.104419   0.023359   4.470 7.81e-06 ***
-# local_d_sq                   -0.063529   0.012122  -5.241 1.60e-07 ***
-# landuse_factorHuman-modified -0.265646   0.046553  -5.706 1.15e-08 ***
-# landuse_factorDeciduous       0.286945   0.053815   5.332 9.71e-08 ***
-# landuse_factorMixed           0.064955   0.032945   1.972   0.0487 *  
-# landuse_factorOpen/shrub/bog  0.054153   0.039163   1.383   0.1667    
-# landuse_factorNew forest      0.367683   0.027365  13.436  < 2e-16 ***
-
-# ---------------------------------------------------- basic quadratic -1 ------------------------------
-
-TMBStruc1.2.1 <- glmmTMB(
-  case_ ~ log_sl_ +
-    state_d + state_d_sq +
-    local_d + local_d_sq +
-    landuse_factor +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3,
-  doFit = FALSE
-)
-
-TMBStruc1.2.1$parameters$theta[1] = log(1e3)  
-TMBStruc1.2.1$mapArg = list(theta = factor(c(NA, 1)))
-model_glmm1.2.1 <- glmmTMB:::fitTMB(TMBStruc1.2.1)
-summary(model_glmm1.2.1)
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  404815.0  404938.4 -202395.5  404791.0    216424 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 1.459e-01    0.3819
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
-# 
-# Conditional model:
-#                              Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -2.91575    7.13222  -0.409   0.6827    
-# log_sl_                       0.13378    0.00789  16.956  < 2e-16 ***
-# state_d                       0.45764    0.08040   5.692 1.25e-08 ***
-# state_d_sq                   -0.09655    0.04161  -2.320   0.0203 *  
-# local_d                       0.10353    0.02332   4.439 9.05e-06 ***
-# local_d_sq                   -0.06323    0.01211  -5.221 1.78e-07 ***
-# landuse_factorHuman-modified -0.26431    0.04652  -5.682 1.33e-08 ***
-# landuse_factorDeciduous       0.28707    0.05380   5.336 9.52e-08 ***
-# landuse_factorMixed           0.06510    0.03294   1.977   0.0481 *  
-# landuse_factorOpen/shrub/bog  0.05453    0.03915   1.393   0.1637    
-# landuse_factorNew forest      0.36780    0.02736  13.443  < 2e-16 ***
 
 #------------------------------------------------------------------season -------------------------------------
 # Define GLMM structure without fitting
@@ -1079,6 +989,25 @@ summary(model_glmm2.0.1)
 # local_d:seasonSpring          0.179345   0.059527   3.013 0.002588 ** 
 
 
+TMBStruc2.0.2 <- glmmTMB(
+  case_ ~ log_sl_ +
+    state_d + local_d + 
+    landuse_factor +
+    season:state_d + season:local_d +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc2.0.2$parameters$theta[1] = log(1e3)  
+TMBStruc2.0.2$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm2.0.2 <- glmmTMB:::fitTMB(TMBStruc2.0.2)
+summary(model_glmm2.0.2)
+
+
+
 # ---------------------------------------------------------- time ------------------------------------------
 TMBStruc3 <- glmmTMB(
   case_ ~ log_sl_ + cos_ta_ + 
@@ -1224,70 +1153,7 @@ summary(model_glmm3.0.1)
 # local_d:factor(time_category)Night    -0.257407   0.049205  -5.231 1.68e-07 ***
 # local_d:factor(time_category)Twilight -0.065529   0.069543  -0.942  0.34605    
 
-# ----------------------------------------- time of day but in two categories ----------------------
 
-
-steps3.1 <- steps3 %>% 
-  mutate(
-    time_category3.1 = 
-      case_when(
-        time_category == "Night" | time_category == "Twilight" ~ "Dark", 
-        TRUE ~ "Day"
-    )
-  )
-
-
-steps3.1$time_category3.1 <- factor(steps3.1$time_category3.1) %>% relevel(ref = "Day")
-
-
-
-TMBStruc3.1 <- glmmTMB(
-  case_ ~ log_sl_ + cos_ta_ + 
-    minor_d + major_d + local_d + 
-    landuse_factor +
-    time_category3.1:minor_d + time_category3.1:major_d + time_category3.1:local_d +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3.1,
-  doFit = FALSE
-)
-
-TMBStruc3.1$parameters$theta[1] = log(1e3)  
-
-TMBStruc3.1$mapArg = list(theta = factor(c(NA, 1)))
-
-model_glmm3.1 <- glmmTMB:::fitTMB(TMBStruc3.1)
-
-summary(model_glmm3.1)
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  404839.1  404993.4 -202404.5  404809.1    216421 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev.
-#  str_ID (Intercept) 1.000e+06 1000.000
-#  id     (Intercept) 1.537e-01    0.392
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
-# 
-# Conditional model:
-#                               Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -3.066524   7.132260  -0.430   0.6672    
-# log_sl_                       0.133145   0.007889  16.878  < 2e-16 ***
-# cos_ta_                       0.005872   0.007516   0.781   0.4347    
-# minor_d                       0.267968   0.130261   2.057   0.0397 *  
-# major_d                      -0.124804   0.137594  -0.907   0.3644    
-# local_d                       0.203761   0.031878   6.392 1.64e-10 ***
-# landuse_factorHuman-modified -0.309251   0.046222  -6.691 2.22e-11 ***
-# landuse_factorDeciduous       0.281079   0.053741   5.230 1.69e-07 ***
-# landuse_factorMixed           0.060394   0.032900   1.836   0.0664 .  
-# landuse_factorOpen/shrub/bog  0.049524   0.039173   1.264   0.2061    
-# landuse_factorNew forest      0.362787   0.027344  13.267  < 2e-16 ***
-# minor_d:time_category3.1Dark  0.110346   0.182739   0.604   0.5459    
-# major_d:time_category3.1Dark  0.442162   0.193096   2.290   0.0220 *  
-# local_d:time_category3.1Dark -0.208665   0.045187  -4.618 3.88e-06 ***
 
 
 
@@ -1550,6 +1416,7 @@ day_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Da
                     major_median = median(major_d, na.rm = TRUE),
                     minor_mean = mean(minor_d, na.rm = TRUE),
                     local_mean = mean(local_d, na.rm = TRUE),
+                    state_mean = mean(state_d, na.rm = TRUE),
                     n = length(major_d)))
 
 night_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Night"), 
@@ -1557,6 +1424,7 @@ night_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "
                        major_median = median(major_d, na.rm = TRUE),
                        minor_mean = mean(minor_d, na.rm = TRUE),
                        local_mean = mean(local_d, na.rm = TRUE),
+                       state_mean = mean(state_d, na.rm = TRUE),
                        n = length(major_d)))
 
 twilight_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Twilight"), 
@@ -1564,6 +1432,7 @@ twilight_summary <- with(subset(steps3_original, case_ == TRUE & time_category =
                           major_median = median(major_d, na.rm = TRUE),
                           minor_mean = mean(minor_d, na.rm = TRUE),
                           local_mean = mean(local_d, na.rm = TRUE),
+                          state_mean = mean(state_d, na.rm = TRUE),
                           n = length(major_d)))
 
 # Combine results
@@ -2020,6 +1889,245 @@ summary(model_glmm55)
 # crosses_localTRUE:factor(time_category)Twilight   0.344776   0.139541   2.471  0.01348 *  
 
 ```
+
+
+
+
+```{r step length ~ distance to road}
+
+# Calculate distance to nearest road for each step
+steps_with_dist <- steps3_original
+
+# Create distance bands
+steps_with_dist$dist_band <- cut(steps_with_dist$state_d, 
+                                breaks = c(-Inf, 50, 250, 500, 1000, 1500, 2000, Inf),
+                                labels = c("0-50m", "50-250m", "250-500m", "500-1000m", "1000-1500m", "1500-2000m", ">2000m"))
+
+
+# Only use used steps (case_ == TRUE)
+used_steps <- steps_with_dist[steps_with_dist$case_ == TRUE,]
+
+# Calculate mean step length by distance band
+sl_by_dist <- aggregate(sl_ ~ dist_band, data = used_steps, FUN = mean)
+
+# Visualize
+ggplot(used_steps, aes(x = dist_band, y = log(sl_))) +
+  geom_boxplot() +
+  labs(x = "Distance to road, m", y = "Log step length, m",
+       title = "Movement speed vs distance to road")
+
+# Statistical test
+model_sl <- lm(sl_ ~ dist_band, data = used_steps)
+anova(model_sl)
+
+
+# Convert turning angles to absolute deviation from straight-line movement
+used_steps$turn_abs <- abs(used_steps$ta_)
+
+used_steps$turn_abs_deg <- used_steps$turn_abs * (180/pi)
+
+# Calculate mean turning angle by distance band
+ta_by_dist <- aggregate(turn_abs_deg ~ dist_band, data = used_steps, FUN = mean)
+
+# Visualize
+ggplot(used_steps, aes(x = dist_band, y = turn_abs_deg)) +
+  geom_boxplot() +
+  labs(x = "Distance to road, m", y = "Absolute turning angle, degrees",
+       title = "Movement direction persistance vs distance to road")
+
+# Statistical test
+model_ta <- lm(turn_abs ~ dist_band, data = used_steps)
+anova(model_ta)
+
+ggplot(used_steps, aes(x = ta_ * (180/pi), fill = dist_band)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ dist_band) +
+  labs(x = "Turning angle, degrees", y = "Density",
+       title = "Distribution of Turning Angles by Distance from Road")
+
+
+
+ggplot(used_steps, aes(x = log(sl_), fill = dist_band)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ dist_band) +
+  labs(x = "Log step length, m", y = "Density",
+       title = "Distribution of step length by distance from road")
+
+
+
+
+
+```
+
+
+
+
+```{r other other models}
+
+
+# ----------------------------------------- basic with quadratic terms -------------------------------
+
+steps3$state_d_sq <- steps3$state_d^2
+steps3$local_d_sq <- steps3$local_d^2
+
+TMBStruc1.2 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    state_d + state_d_sq +
+    local_d + local_d_sq +
+    landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc1.2$parameters$theta[1] = log(1e3)  
+TMBStruc1.2$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm1.2 <- glmmTMB:::fitTMB(TMBStruc1.2)
+summary(model_glmm1.2)
+
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404816.1  404949.8 -202395.0  404790.1    216423 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.464e-01    0.3826
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -2.915826   7.132236  -0.409   0.6827    
+# log_sl_                       0.133659   0.007890  16.940  < 2e-16 ***
+# cos_ta_                       0.007065   0.007520   0.940   0.3475    
+# state_d                       0.459203   0.080473   5.706 1.15e-08 ***
+# state_d_sq                   -0.096926   0.041649  -2.327   0.0200 *  
+# local_d                       0.104419   0.023359   4.470 7.81e-06 ***
+# local_d_sq                   -0.063529   0.012122  -5.241 1.60e-07 ***
+# landuse_factorHuman-modified -0.265646   0.046553  -5.706 1.15e-08 ***
+# landuse_factorDeciduous       0.286945   0.053815   5.332 9.71e-08 ***
+# landuse_factorMixed           0.064955   0.032945   1.972   0.0487 *  
+# landuse_factorOpen/shrub/bog  0.054153   0.039163   1.383   0.1667    
+# landuse_factorNew forest      0.367683   0.027365  13.436  < 2e-16 ***
+
+# ---------------------------------------------------- basic quadratic -1 ------------------------------
+
+TMBStruc1.2.1 <- glmmTMB(
+  case_ ~ log_sl_ +
+    state_d + state_d_sq +
+    local_d + local_d_sq +
+    landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc1.2.1$parameters$theta[1] = log(1e3)  
+TMBStruc1.2.1$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm1.2.1 <- glmmTMB:::fitTMB(TMBStruc1.2.1)
+summary(model_glmm1.2.1)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404815.0  404938.4 -202395.5  404791.0    216424 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.459e-01    0.3819
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                              Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -2.91575    7.13222  -0.409   0.6827    
+# log_sl_                       0.13378    0.00789  16.956  < 2e-16 ***
+# state_d                       0.45764    0.08040   5.692 1.25e-08 ***
+# state_d_sq                   -0.09655    0.04161  -2.320   0.0203 *  
+# local_d                       0.10353    0.02332   4.439 9.05e-06 ***
+# local_d_sq                   -0.06323    0.01211  -5.221 1.78e-07 ***
+# landuse_factorHuman-modified -0.26431    0.04652  -5.682 1.33e-08 ***
+# landuse_factorDeciduous       0.28707    0.05380   5.336 9.52e-08 ***
+# landuse_factorMixed           0.06510    0.03294   1.977   0.0481 *  
+# landuse_factorOpen/shrub/bog  0.05453    0.03915   1.393   0.1637    
+# landuse_factorNew forest      0.36780    0.02736  13.443  < 2e-16 ***
+
+# ----------------------------------------- time of day but in two categories ----------------------
+
+
+steps3.1 <- steps3 %>% 
+  mutate(
+    time_category3.1 = 
+      case_when(
+        time_category == "Night" | time_category == "Twilight" ~ "Dark", 
+        TRUE ~ "Day"
+    )
+  )
+
+
+steps3.1$time_category3.1 <- factor(steps3.1$time_category3.1) %>% relevel(ref = "Day")
+
+
+
+TMBStruc3.1 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    minor_d + major_d + local_d + 
+    landuse_factor +
+    time_category3.1:minor_d + time_category3.1:major_d + time_category3.1:local_d +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3.1,
+  doFit = FALSE
+)
+
+TMBStruc3.1$parameters$theta[1] = log(1e3)  
+
+TMBStruc3.1$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm3.1 <- glmmTMB:::fitTMB(TMBStruc3.1)
+
+summary(model_glmm3.1)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404839.1  404993.4 -202404.5  404809.1    216421 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev.
+#  str_ID (Intercept) 1.000e+06 1000.000
+#  id     (Intercept) 1.537e-01    0.392
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -3.066524   7.132260  -0.430   0.6672    
+# log_sl_                       0.133145   0.007889  16.878  < 2e-16 ***
+# cos_ta_                       0.005872   0.007516   0.781   0.4347    
+# minor_d                       0.267968   0.130261   2.057   0.0397 *  
+# major_d                      -0.124804   0.137594  -0.907   0.3644    
+# local_d                       0.203761   0.031878   6.392 1.64e-10 ***
+# landuse_factorHuman-modified -0.309251   0.046222  -6.691 2.22e-11 ***
+# landuse_factorDeciduous       0.281079   0.053741   5.230 1.69e-07 ***
+# landuse_factorMixed           0.060394   0.032900   1.836   0.0664 .  
+# landuse_factorOpen/shrub/bog  0.049524   0.039173   1.264   0.2061    
+# landuse_factorNew forest      0.362787   0.027344  13.267  < 2e-16 ***
+# minor_d:time_category3.1Dark  0.110346   0.182739   0.604   0.5459    
+# major_d:time_category3.1Dark  0.442162   0.193096   2.290   0.0220 *  
+# local_d:time_category3.1Dark -0.208665   0.045187  -4.618 3.88e-06 ***
+
+
+
+```
+
+
 # ----------------------------------------------- VISUALISATIONS ------------------------------------
 
 
@@ -2060,133 +2168,11 @@ corrplot(het_cor$correlations, method = "color",
          tl.col = "black", tl.srt = 45)
 
 
-ggplot(steps3_unscaled, aes(x = major_d_orig, fill = factor(case_))) + 
-  geom_histogram(bins = 30, alpha = 0.5, position = "identity") +
-  scale_fill_manual(values = c("red", "blue"), labels = c("Available", "Used")) +
-  labs(title = "Histogram of Distance to Major Roads",
-       x = "Distance to Major Roads (m)",
-       y = "Count",
-       fill = "Step Type") +
-  theme_minimal()
-
-ggplot(steps3_unscaled, aes(x = local_d_orig, fill = factor(case_))) + 
-  geom_histogram(bins = 30, alpha = 0.5, position = "identity") +
-  scale_fill_manual(values = c("red", "blue"), labels = c("Available", "Used")) +
-  labs(title = "Histogram of Distance to Local Roads",
-       x = "Distance to Local Roads (m)",
-       y = "Count",
-       fill = "Step Type") +
-  theme_minimal()
-
-# --------------------------------------- visualisations -------------------------------------------------------------------
-
-# Function to create RSS plots for model_glmm3.0.1
-# Corrected function to create RSS plots for model_glmm3.0.1
-plot_time_rss <- function(model, data, road_type = "state", 
-                          max_dist = 2000, n_points = 200) {
-  
-  # Get scaling parameters
-  if(road_type == "state") {
-    var_name <- "state_d"
-    var_center <- attr(data$state_d, "scaled:center")
-    var_scale <- attr(data$state_d, "scaled:scale")
-  } else {
-    var_name <- "local_d"
-    var_center <- attr(data$local_d, "scaled:center")
-    var_scale <- attr(data$local_d, "scaled:scale")
-  }
-  
-  # Extract fixed effect coefficients
-  coefs <- fixef(model)$cond
-  
-  # Get main coefficient
-  main_coef_name <- var_name
-  main_coef <- coefs[main_coef_name]
-  
-  # Create sequence of original distance values
-  original_seq <- seq(0, max_dist, length.out = n_points)
-  
-  # Create dataframe to store results
-  results <- data.frame()
-  
-  # For each time category
-  for(time_cat in c("Day", "Night", "Twilight")) {
-    
-    # Create scaled distance sequence
-    scaled_seq <- (original_seq - var_center) / var_scale
-    
-    # Calculate effect size for this time category
-    if(time_cat == "Day") {
-      # Day is reference category, so just use main effect
-      effect_size <- main_coef
-    } else {
-      # For Night and Twilight, find the interaction term
-      interaction_name <- paste0(var_name, ":factor(time_category)", time_cat)
-      
-      # Check if interaction exists in model
-      if(interaction_name %in% names(coefs)) {
-        effect_size <- main_coef + coefs[interaction_name]
-      } else {
-        effect_size <- main_coef
-      }
-    }
-    
-    # Calculate linear predictor for the specific road effect
-    linear_pred <- scaled_seq * effect_size
-    
-    # Convert to relative selection strength
-    rss <- exp(linear_pred)
-    
-    # Add to results dataframe
-    cat_results <- data.frame(
-      distance = original_seq,
-      time_category = time_cat,
-      scaled_dist = scaled_seq,
-      linear_pred = linear_pred,
-      rss = rss
-    )
-    
-    # Add to results dataframe
-    results <- rbind(results, cat_results)
-  }
-  
-  # Scale RSS to be relative to minimum value (minimum = 1)
-  results$rss_relative <- results$rss / min(results$rss)
-  
-  # Create plot
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
-  
-  p <- ggplot(results, aes(x = distance, y = rss_relative, color = time_category)) +
-    geom_line(linewidth = 1.2) +
-    labs(x = paste0("Distance to ", road_label, " (m)"),
-         y = "Relative Selection Strength",
-         title = paste0("Moose Selection Relative to Distance from ", road_label),
-         subtitle = "By time of day",
-         color = "Time of Day") +
-    theme_minimal() +
-    theme(legend.position = "bottom",
-          panel.grid.minor = element_blank(),
-          panel.border = element_rect(fill = NA, color = "gray80"),
-          plot.title = element_text(face = "bold")) +
-    scale_color_manual(values = c("Day" = "#FFC107", "Night" = "#303F9F", "Twilight" = "#7B1FA2"))
-  
-  # Return both plot and data
-  return(list(plot = p, data = results))
-}
-
-# Create plots
-state_road_rss <- plot_time_rss(model_glmm3.0.1, steps3, road_type = "state")
-local_road_rss <- plot_time_rss(model_glmm3.0.1, steps3, road_type = "local")
-
-# Display plots
-state_road_rss$plot
-local_road_rss$plot
-
-# To arrange both plots side by side
-library(gridExtra)
-grid.arrange(state_road_rss$plot, local_road_rss$plot, ncol = 2)
-
 ```
+
+
+
+
 ```{r more visualisations}
 # 1. Basic calculation function for time-based models
 calculate_time_predictions <- function(model, data, road_var, max_dist = 2000) {
@@ -2485,12 +2471,12 @@ local_time_plot
 
 # 2. Season-based model plots (model_glmm2.0)
 # State roads
-state_season_preds <- calculate_season_predictions(model_glmm2.0, steps3, "state_d")
+state_season_preds <- calculate_season_predictions(model_glmm2.0.2, steps3, "state_d")
 state_season_plot <- plot_season_predictions(state_season_preds, "state", "probability")
 state_season_plot
 
 # Local roads
-local_season_preds <- calculate_season_predictions(model_glmm2.0, steps3, "local_d")
+local_season_preds <- calculate_season_predictions(model_glmm2.0.2, steps3, "local_d")
 local_season_plot <- plot_season_predictions(local_season_preds, "local", "probability")
 local_season_plot
 
@@ -2520,6 +2506,9 @@ head(steps3$state_d)
 attributes(steps3$state_d)  # Should show scaled:center and scaled:scale
 
 ```
+
+
+
 ```{r checking CI ways}
 
 # Add confidence intervals to the calculation function
@@ -2635,6 +2624,9 @@ plot2 <- plot_time_predictions_facet(state_preds_ci, "state")
 plot2
 
 ```
+
+
+
 ```{r crossing model visualisation ...}
 
 # Calculate RSS values for each landuse type and crossing status
@@ -2710,6 +2702,10 @@ ggplot(rss_data, aes(x = x_jitter, y = y_jitter, shape = landuse, color = landus
 
 
 ```
+
+
+
+
 
 ```{r joining CI and RSS visualisations}
 
@@ -3004,11 +3000,11 @@ local_time_plot <- plot_time_facet(local_time_preds, "local")
 
 # Create plots for season model (model_glmm2.0)
 # State roads
-state_season_preds <- calculate_season_ci(model_glmm2.0, steps3, "state_d")
+state_season_preds <- calculate_season_ci(model_glmm2.0.2, steps3, "state_d")
 state_season_plot <- plot_season_facet(state_season_preds, "state")
 
 # Local roads
-local_season_preds <- calculate_season_ci(model_glmm2.0, steps3, "local_d")
+local_season_preds <- calculate_season_ci(model_glmm2.0.2, steps3, "local_d")
 local_season_plot <- plot_season_facet(local_season_preds, "local")
 
 # Create plots for basic model (model_glmm1.1.1)
@@ -3028,15 +3024,15 @@ local_season_plot
 state_basic_plot
 local_basic_plot
 
-# Arrange plots in a grid if needed
-time_plots <- grid.arrange(state_time_plot, local_time_plot, 
-                         nrow = 2, top = "Moose Road Selection by Time of Day")
-
-season_plots <- grid.arrange(state_season_plot, local_season_plot,
-                           nrow = 2, top = "Moose Road Selection by Season")
-
-basic_plots <- grid.arrange(state_basic_plot, local_basic_plot,
-                          nrow = 2, top = "Moose Road Selection - Basic Model")
+# # Arrange plots in a grid if needed
+# time_plots <- grid.arrange(state_time_plot, local_time_plot, 
+#                          nrow = 2, top = "Moose Road Selection by Time of Day")
+# 
+# season_plots <- grid.arrange(state_season_plot, local_season_plot,
+#                            nrow = 2, top = "Moose Road Selection by Season")
+# 
+# basic_plots <- grid.arrange(state_basic_plot, local_basic_plot,
+#                           nrow = 2, top = "Moose Road Selection - Basic Model")
 
 # Save plots if needed
 # ggsave("time_plots.png", time_plots, width = 12, height = 8)
@@ -3046,271 +3042,240 @@ basic_plots <- grid.arrange(state_basic_plot, local_basic_plot,
 ```
 
 
-```{r Stefanie example, not accessible currently.. just paste}
-#'---
-#'title: RSF and SSF analysis of fisher 
-#'author: "S. Muff, J. Signer, J. Fieberg"
-#'date: "r format(Sys.time(), '%d %B, %Y')"
-#'output:
-#'  html_document:
-#'    toc: yes
-#'---
-
-#+ include = FALSE
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, cache = TRUE)
-
-#' ## Purpose
-#' The purpose of this document is to illustrate how a simple RSF and SSF with random effects can be fitted to tracking data. We use a data set containing fisher locations from:
-#' 
-#' - LaPoint, S., Gallery, P., Wikelski, M. and Kays, R. (2013). Animal behavior, cost-based corridor models, and real corridors. Landscape Ecology, 28, 1615-1630.
-#' 
-
-#' ## Load libraries and prepare data
-#+ echo=TRUE, message=FALSE, warning=FALSE
+```{r prediction plots}
 library(glmmTMB)
-library(INLA)
-library(tidyverse)
-library(raster)
-library(survival)
-library(TwoStepCLogit)
-library(amt)
+library(ggplot2)
+library(dplyr)
+library(scales)
 
-#' First load the fisher data (this is the data as it was downloaded from movebank).
-#' We simplified the fisher data slightly, by running the following code prior to upload the data (to save space). This code is not needed, unless you download the original data from: https://www.datarepository.movebank.org/handle/10255/move.330.
-#+ eval=FALSE
-dat <- read_csv("Martes pennanti LaPoint New York.csv") %>% 
-  filter(!is.na(location-lat)) %>% 
-  select(x = location-long, y = location-lat, 
-         t = timestamp, id = tag-local-identifier) %>% 
-  filter(id %in% c(1465, 1466, 1072, 1078, 1016, 1469))
-write_csv(dat, "Fisher_analysis/fisher_data.csv")
+# Function to create prediction curves specifically for model_glmm3.0.1
+create_prediction_curves <- function(model, data, variable = "state_d", 
+                                    landuse = "Coniferous", log_sl_val = 0) {
+  
+  # First check if we're using the correct model type
+  if (!inherits(model, "glmmTMB")) {
+    # If we have a model that was created with doFit = FALSE
+    # We need to fit it first
+    if (is.list(model) && "fit" %in% names(model)) {
+      # This is a partially fitted glmmTMB model
+      # We need to use the parameters that were already estimated
+      
+      # Create a new prediction function
+      predict_func <- function(newdata) {
+        # Get fixed effects coefficients
+        beta <- model$fit$par[1:length(model$parameters$beta)]
+        
+        # Create the linear predictor manually
+        X <- model_matrix(model, newdata)
+        
+        # Calculate linear predictor
+        eta <- as.numeric(X %*% beta)
+        
+        # Apply link function (log for Poisson)
+        return(eta)
+      }
+    } else {
+      stop("Model must be a fitted glmmTMB object or a list with fit components")
+    }
+  } else {
+    # If we have a proper glmmTMB object, we can use predict directly
+    predict_func <- function(newdata) {
+      predict(model, newdata = newdata, re.form = NA, type = "link")
+    }
+  }
+  
+  # Get range of the variable to predict along
+  var_range <- range(data[[variable]], na.rm = TRUE)
+  
+  # Create sequence of values for x-axis
+  pred_values <- seq(var_range[1], var_range[2], length.out = 100)
+  
+  # Get scaled parameters to back-transform to original scale
+  if(variable == "state_d") {
+    center <- attr(data$state_d, "scaled:center")
+    scale <- attr(data$state_d, "scaled:scale")
+    orig_values <- pred_values * scale + center
+  } else if(variable == "local_d") {
+    center <- attr(data$local_d, "scaled:center")
+    scale <- attr(data$local_d, "scaled:scale")
+    orig_values <- pred_values * scale + center
+  } else {
+    orig_values <- pred_values
+  }
+  
+  # Create prediction data frames for each time category
+  time_categories <- c("Day", "Night", "Twilight")
+  
+  # Store results
+  all_predictions <- data.frame()
+  
+  # Create predictions for each time category
+  for(time_cat in time_categories) {
+    # Create new data frame for predictions
+    if(variable == "state_d") {
+      newdata <- data.frame(
+        log_sl_ = log_sl_val,
+        state_d = pred_values,
+        local_d = mean(data$local_d, na.rm = TRUE),
+        landuse_factor = factor(landuse, levels = levels(data$landuse_factor)),
+        "factor(time_category)" = factor(time_cat, levels = levels(data$`factor(time_category)`))
+      )
+    } else if(variable == "local_d") {
+      newdata <- data.frame(
+        log_sl_ = log_sl_val,
+        state_d = mean(data$state_d, na.rm = TRUE),
+        local_d = pred_values,
+        landuse_factor = factor(landuse, levels = levels(data$landuse_factor)),
+        "factor(time_category)" = factor(time_cat, levels = levels(data$`factor(time_category)`))
+      )
+    }
+    
+    # Make predictions on the link scale (log scale for Poisson)
+    preds <- predict_func(newdata)
+    
+    # Convert from log to response scale
+    probs <- exp(preds)
+    
+    # Normalize to probability scale (divide by max value)
+    max_prob <- max(probs)
+    probs_norm <- probs / max_prob
+    
+    # Combine results
+    result <- data.frame(
+      distance = orig_values,
+      probability = probs_norm,
+      time_category = time_cat,
+      variable = variable
+    )
+    
+    all_predictions <- rbind(all_predictions, result)
+  }
+  
+  return(all_predictions)
+}
 
-#' Now lets start by reading in the simplified fisher data
+# Helper function to create model matrix
+model_matrix <- function(model, newdata) {
+  # Extract terms and contrasts from the model
+  terms <- terms(model$fr)
+  contrasts <- model$contrasts
+  
+  # Create the model matrix
+  X <- model.matrix(delete.response(terms), newdata, contrasts.arg = contrasts)
+  
+  # Make sure we have all necessary columns
+  # If columns are missing, add them with zeros
+  required_cols <- colnames(model$condList$X)
+  missing_cols <- setdiff(required_cols, colnames(X))
+  
+  if (length(missing_cols) > 0) {
+    X_add <- matrix(0, nrow = nrow(X), ncol = length(missing_cols))
+    colnames(X_add) <- missing_cols
+    X <- cbind(X, X_add)
+    # Make sure columns are in correct order
+    X <- X[, required_cols]
+  }
+  
+  return(X)
+}
 
-dat <- read_csv("fisher_data.csv")
+# Example usage:
+# state_preds <- create_prediction_curves(model_glmm3.0.1, steps3, variable = "state_d", landuse = "Coniferous")
+# local_preds <- create_prediction_curves(model_glmm3.0.1, steps3, variable = "local_d", landuse = "Coniferous")
 
-#' Include sex of each animal and create tracks with an appropriate coordinate reference system using the amt package
-dat_all <- dat %>% nest(-id) 
-dat_all$sex <- c("f", "f", "f", "m", "m", "m")
-dat_all <- dat_all %>% 
-  mutate(trk = map(data, function(d) {
-    make_track(d, x, y, t, crs = sp::CRS("+init=epsg:4326")) %>% 
-      transform_coords(sp::CRS("+init=epsg:5070"))
-  }))
+# Function to create plots
+plot_predictions <- function(all_preds) {
+  ggplot(all_preds, aes(x = distance, y = probability, color = time_category, linetype = time_category)) +
+    geom_line(size = 1) +
+    facet_wrap(~road_type, scales = "free_x") +
+    scale_color_manual(values = c("Day" = "#FFC107", "Night" = "#3F51B5", "Twilight" = "#9C27B0")) +
+    scale_linetype_manual(values = c("Day" = "solid", "Night" = "dashed", "Twilight" = "dotted")) +
+    labs(
+      title = "Predicted Probability of Wolf Presence by Distance to Roads",
+      x = "Distance (m)",
+      y = "Relative Probability",
+      color = "Time of Day",
+      linetype = "Time of Day"
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      strip.background = element_rect(fill = "gray90"),
+      strip.text = element_text(face = "bold")
+    )
+}
 
-#' Summarize sampling rates, 
-dat_all %>% mutate(sr = lapply(trk, summarize_sampling_rate)) %>% 
-  select(id, sr) %>% unnest
+# Full example of creating both prediction sets and plotting them
+create_and_plot_predictions <- function(model, data) {
+  # Create prediction curves for state_d (state highway distance)
+  state_preds <- create_prediction_curves(model, data, 
+                                         variable = "state_d", 
+                                         landuse = "Coniferous")
+  
+  # Create prediction curves for local_d (local road distance)
+  local_preds <- create_prediction_curves(model, data, 
+                                         variable = "local_d", 
+                                         landuse = "Coniferous")
+  
+  # Combine predictions
+  all_preds <- rbind(
+    state_preds %>% mutate(road_type = "State Highway"),
+    local_preds %>% mutate(road_type = "Local Road")
+  )
+  
+  # Plot the results
+  plot_predictions(all_preds)
+}
 
-#' 10 minutes seems to appropriate for all animals.
-#' Resample the track to 10 minutes with a tolerance of 2 minutes.
+# To create separate plots for different landuse types
+create_landuse_plots <- function(model, data) {
+  landuse_types <- levels(data$landuse_factor)
+  plot_list <- list()
+  
+  for(landuse in landuse_types) {
+    # State distance
+    state_preds <- create_prediction_curves(model, data, 
+                                          variable = "state_d", 
+                                          landuse = landuse)
+    
+    # Plot
+    p <- ggplot(state_preds, aes(x = distance, y = probability, color = time_category, linetype = time_category)) +
+      geom_line(size = 1) +
+      scale_color_manual(values = c("Day" = "#FFC107", "Night" = "#3F51B5", "Twilight" = "#9C27B0")) +
+      scale_linetype_manual(values = c("Day" = "solid", "Night" = "dashed", "Twilight" = "dotted")) +
+      labs(
+        title = paste("Predicted Probability by Distance to State Highway -", landuse),
+        x = "Distance (m)",
+        y = "Relative Probability",
+        color = "Time of Day",
+        linetype = "Time of Day"
+      ) +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+    
+    plot_list[[landuse]] <- p
+  }
+  
+  return(plot_list)
+}
 
-dat1 <- dat_all %>% mutate(dat_clean = map(trk, ~ {
-  .x %>% track_resample(rate = minutes(10), tolerance = seconds(120))
-  }))
+# Example of creating curves with your model:
+# 
+# # Create and plot predictions
+# plot_obj <- create_and_plot_predictions(model_glmm3.0.1, steps3)
 
-#' Read in the landuse raster and reclassify to two categories (wet forests and other).
-landuse <- raster("landuse_study_area.tif")
-wet_forests <- landuse %in% c(90, 95)
-names(wet_forests) <- "forest"
-
-#' # Resource Selection Functions (RSF)
-#' 
-#' ## Data development for RSF
-#' 
-#' Now start with an RSF by creating random points per animal and extract the covariates for the observed and random points.
-
-dat_rsf <- dat1 %>% mutate(rp = map(dat_clean, ~ .x %>% random_points() %>% 
-      extract_covariates(wet_forests))) %>% 
-  select(id, rp) %>%  unnest()
-#' Change id column, to 1:6
-dat_rsf$id <- as.numeric(factor(dat_rsf$id))
-
-#' Make response numeric (required for INLA)
-dat_rsf$y <- as.numeric(dat_rsf$case_)
-
-#' We use a weighted likelihood for to fit the RSF. To this end, we need to create a variable for the weights, where used points (case_ = TRUE) keep weight 1, and available points (case_ = FALSE) obtain a large weight $W$ (here $W=1000$):
-#+ echo=TRUE, message=FALSE
-dat_rsf$weight <- 1000^(1 - dat_rsf$case_)
-
-#' ## Mixed RSFs
-#' 
-#' ### glmmTMB()
-#' 
-#' 
-#' As explained in the manuscript (Section 3.4), we recommend to manually fix the variance of the random intercept at a large value. This can be done in glmmTMB() by first setting up the model, but do not yet fit it:
-#+ echo=TRUE, message=FALSE,cache=TRUE
-fisher.tmp <- glmmTMB(case_ ~ forest + (1|id) + (0 + forest |id) , family=binomial(), data = dat_rsf,
-                         doFit=FALSE, weights = weight)
-
-
-#' Then fix the standard deviation of the first random term, which is the (1|id) component  in the above model equation. We use $\sigma=10^3$, which corresponds to a variance of $10^6$:
-#+ echo=TRUE, message=FALSE,cache=TRUE
-fisher.tmp$parameters$theta[1] <- log(1e3)
-
-
-#' We need to tell glmmTMB not to change the first entry of the vector of variances, and give all other variances another indicator to make sure they can be freely estimated:
-#+ echo=TRUE, message=FALSE,cache=TRUE
-fisher.tmp$mapArg <- list(theta=factor(c(NA, 1)))
-
-#' Then fit the model and look at the results:
-#+ echo=TRUE, message=FALSE, cache=TRUE 
-fisher.rsf <- glmmTMB:::fitTMB(fisher.tmp)
-summary(fisher.rsf)
-
-
-#' ###  INLA 
-#'
-#' Let us now carry the analysis with random intercept $\mathsf{N}(0,\sigma_{id}^2)$ and fixed variance $\sigma_{id}^2=10^6$ using INLA. A peculiarity of INLA is that the same variable cannot be used more than once. So for ID we need to generate a new (but identical) variable
-#+ echo=TRUE, message=FALSE
-dat_rsf$id1 <-dat_rsf$id
-
-#' For the fixed effects we use the INLA (default) priors $\beta \sim \mathsf{N}(0,\sigma_\beta^2)$ with $\sigma_\beta^2=10^4$. The precisions of the priors are thus set to:
-#+ echo=TRUE, message=FALSE
-prec.beta.forest  <- 1e-4  
-
-#' We now store the INLA formula with the fixed effects forest, plus two random effects, namely one for the individual-specific intercept and one for the individual-specific slope for forest. Note that the precision (thus $1/\sigma^2$) for id is fixed (fixed=TRUE) at the value of $10^{-6}$ (thus the variance is fixed at $10^6$). The other precision is given a PC(1,0.05) prior:
-#+ echo=TRUE, message=FALSE
-formula.inla <- y ~  forest + 
-  f(id, model="iid", hyper=list(theta = list(initial=log(1e-6),fixed=TRUE))) +
-  f(id1,forest,values=1:6,model="iid",
-    hyper=list(theta=list(initial=log(1),fixed=F,prior="pc.prec",param=c(1,0.05)))) 
-
-
-#' The actual INLA call is then given as follows:
-#+  echo=TRUE, message=FALSE, cache=TRUE
-inla.setOption(enable.inla.argument.weights=TRUE)
-fisher.inla  <- inla(formula.inla, family ="binomial", data=dat_rsf, weights=dat_rsf$weight,
-                        control.fixed = list(
-                          mean = 0,
-                          prec = list(forest = prec.beta.forest)
-                       )
-)
-
-
-
-#' The summary for the posterior distribution of the fixed effects is given as follows:
-#+ echo=TRUE
-fisher.inla$summary.fixed
-
-
-#' Since variances are parameterized and treated as precisions, the summary of the respective posterior distributions is given for the precisions:
-#+ echo=TRUE
-fisher.inla$summary.hyperpar
-
-
-#' Source R functions for calculating posterior means 
-#' and medians of the precisions.
-source("inla_emarginal.R")
-source("inla_mmarginal.R")
-inla_emarginal(fisher.inla)
-inla_mmarginal(fisher.inla)
-
-
-
-#' # Step-Selection Function (SSF)
-#' 
-#' ## Data development for step-selection function
-#' 
-#' First we need to prepare the data. We need to pair each observed point with 10 random points and extract the covariate value at the end point of each step.
-
-#+ warning = FALSE
-dat_ssf <- dat1 %>% 
-  mutate(stps = map(dat_clean, ~ .x %>% steps_by_burst() %>% 
-                      random_steps() %>% extract_covariates(wet_forests))) %>% 
-  select(id, stps) %>% unnest() %>% 
-  mutate(
-    y = as.numeric(case_),
-    id = as.numeric(factor(id)), 
-    step_id = paste0(id, step_id_, sep = "-"))
-dat_ssf
-
-
-#' ## Mixed SSFs 
-
-#' ### 2StepCLogit 
-
-#' The two-step procedure with independent random effect (D="UN(1)"):
-r.Twostep <-  Ts.estim(formula = y ~ forest + strata(step_id) + 
-                     cluster(id), data = dat_ssf, random = ~ forest,
-                   all.m.1=F, D="UN(1)") 
-
-#' Slope estimates and standard errors
-r.Twostep$beta
-r.Twostep$se
-
-#' Variance estimates
-r.Twostep$D
-
-#' ### glmmTMB
-
-
-#' ## Session Info
-#'
-devtools::session_info()
-
-
-#'---
-#' title: Habitat selection of otters (an SSF analysis)
-#' author: "S. Muff, J. Signer, J. Fieberg"
-#' date: "r format(Sys.time(), '%d %B, %Y')"
-#' output:
-#'   html_document: 
-#'     toc: true
-#'---
-#'
-#+ include = FALSE
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, cache = TRUE)
-#'  
-#' **Purpose**: This code replicates the analysis presented in Muff, Signer, Fieberg (2019) Section 4.2 "Habitat selection of otters: an SSF analysis".
-#'
-
-#' ## Load libraries and read in data
-#+ warning=FALSE, message=FALSE
-library(survival)
-library(TwoStepCLogit)
-library(INLA)
-library(glmmTMB)
-options(width=150)
-dat <-  read.csv("d_otter.csv")
-str(dat)
-
-#' NAT1, REST1 and STAU1 are the three factor levels of the factor variable habitat type, encoded as dummy variables, where
-#'
-#' - NAT1: natural habitat (reference category)
-#' - REST1: residual water
-#' - STAU1: a reservoir
-#'
-#' Further, the two continuous variables in the model are:
-#' 
-#' - Sohlbrei: the river width
-#' - Breaks_Dis: step length
-#' 
-#' Finally, Loc is the binary response variable that indicates if a habitat point was used (1) or available (0).
-#'
-#' ### Some data manipulation:
-
-#' Add numerical variable for animals:
-dat$ANIMAL_ID <- as.numeric(as.factor(dat$NA_ANIMAL))
-
-#' Stratum ID is given as "NA_ID" in the data; 
-#' It is easier to have sequential enumeration, so let's generate a new stratum-ID variable str_ID:
-d.map <- data.frame(NA_ID=unique(dat$NA_ID),str_ID=1:length(unique(dat$NA_ID)))
-dat$str_ID <- d.map[match(dat$NA_ID,d.map$NA_ID),"str_ID"]
-dat <- dat[order(dat$str_ID),]
-
-#' Scale and center the two continuous variables river width (Sohlenbrei) and step length (Breaks_Dis)
-dat$Sohlenbrei <- scale(dat$Sohlenbrei)
-dat$Breaks_Dis <- scale(dat$Breaks_Dis)
-
-
-#' ## Fixed effects models 
- 
-#' ### clogit
-r.clogit <- clogit(Loc ~ STAU1 + REST1 + Sohlenbrei + Breaks_Dis  
-                   +   strata(str_ID), data=dat) 
-
-summary(r.clogit)$coef
+# Warning: Unknown or uninitialised column: `factor(time_category)`.Error in EvalADFunObject(ADFun, theta, order = order, hessiancols = cols,  : 
+#   Wrong parameter length.
+# 
+# # Display the plot
+# print(plot_obj)
+# 
+# # Create landuse-specific plots
+# landuse_plots <- create_landuse_plots(model_glmm3.0.1, steps3)
+# 
+# # View individual plots
+# print(landuse_plots[["Coniferous"]])
 
 ```
 
