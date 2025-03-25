@@ -1651,6 +1651,26 @@ summary(model_glmm22)
 # landuse_factorOpen/shrub/bog -0.039269   0.040255  -0.976   0.3293  
 
 
+# Define GLMM structure without fitting
+TMBStruc22.1 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    crosses_state+ crosses_local + 
+    landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc22.1$parameters$theta[1] = log(1e3)  
+
+TMBStruc22.1$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm22.1 <- glmmTMB:::fitTMB(TMBStruc22.1)
+
+summary(model_glmm22.1)
+
 # ---- crossing with landuse interaction -----
 
 # Model for major roads only 
@@ -1665,6 +1685,34 @@ TMBStruc_major$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm_major <- glmmTMB:::fitTMB(TMBStruc_major)
 summary(model_glmm_major)
 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404836.1  404990.4 -202403.1  404806.1    216421 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev. 
+#  str_ID (Intercept) 1.00e+06 1000.0000
+#  id     (Intercept) 1.55e-01    0.3937
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                     -3.121350   7.132286  -0.438  0.66165    
+# log_sl_                                          0.133779   0.007911  16.911  < 2e-16 ***
+# cos_ta_                                         -0.002659   0.007498  -0.355  0.72287    
+# crosses_majorTRUE                               -1.210769   0.396425  -3.054  0.00226 ** 
+# landuse_factorHuman-modified                    -0.374800   0.045678  -8.205 2.30e-16 ***
+# landuse_factorDeciduous                          0.275554   0.053571   5.144 2.69e-07 ***
+# landuse_factorMixed                              0.035282   0.032877   1.073  0.28321    
+# landuse_factorOpen/shrub/bog                     0.021940   0.038952   0.563  0.57326    
+# landuse_factorNew forest                         0.352404   0.027324  12.897  < 2e-16 ***
+# crosses_majorTRUE:landuse_factorHuman-modified  -0.577308   0.818516  -0.705  0.48062    
+# crosses_majorTRUE:landuse_factorDeciduous       -5.754605  35.374804  -0.163  0.87077    
+# crosses_majorTRUE:landuse_factorMixed          -11.072074 176.679731  -0.063  0.95003    
+# crosses_majorTRUE:landuse_factorOpen/shrub/bog   0.820626   0.851219   0.964  0.33502    
+# crosses_majorTRUE:landuse_factorNew forest       0.840924   0.537496   1.565  0.11770   
+
 # Model for minor roads only
 TMBStruc_minor <- glmmTMB(
   case_ ~ log_sl_ + cos_ta_ + 
@@ -1676,6 +1724,10 @@ TMBStruc_minor$parameters$theta[1] = log(1e3)
 TMBStruc_minor$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm_minor <- glmmTMB:::fitTMB(TMBStruc_minor)
 summary(model_glmm_minor)
+
+
+
+
 
 # Model for local roads only
 TMBStruc_local <- glmmTMB(
