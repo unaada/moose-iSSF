@@ -1537,10 +1537,26 @@ crossing_data <- data.frame(
 steps3 <- merge(steps3, crossing_data, by = "row_id", all.x = TRUE)
 steps3$crosses_state <- steps3$crosses_major | steps3$crosses_minor
 
-table(steps3$crosses_major)
-table(steps3$crosses_minor)
-table(steps3$crosses_local)
 
+
+table(steps3$crosses_major[steps3$case_ == 'FALSE'])
+#  FALSE   TRUE 
+# 196254    506 
+table(steps3$crosses_minor[steps3$case_ == 'FALSE'])
+#  FALSE   TRUE 
+# 196533    227 
+table(steps3$crosses_local[steps3$case_ == 'FALSE'])
+#  FALSE   TRUE 
+# 187404   9356 
+table(steps3$crosses_major[steps3$case_ == 'TRUE'])
+# FALSE  TRUE 
+# 19657    19 
+table(steps3$crosses_minor[steps3$case_ == 'TRUE'])
+# FALSE  TRUE 
+# 19645    31 
+table(steps3$crosses_local[steps3$case_ == 'TRUE'])
+# FALSE  TRUE 
+# 18920   756 
 
 # -------------------------------------------------------------------- crossing  -------------
 
@@ -1609,6 +1625,30 @@ model_glmm22.1 <- glmmTMB:::fitTMB(TMBStruc22.1)
 
 summary(model_glmm22.1)
 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404794.5  404907.6 -202386.3  404772.5    216425 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.505e-01    0.3879
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -3.034393   7.132197  -0.425  0.67051    
+# log_sl_                       0.146088   0.008085  18.069  < 2e-16 ***
+# cos_ta_                       0.007087   0.007518   0.943  0.34586    
+# crosses_stateTRUE            -0.505611   0.157549  -3.209  0.00133 ** 
+# crosses_localTRUE            -0.388381   0.044507  -8.726  < 2e-16 ***
+# landuse_factorHuman-modified -0.321049   0.045711  -7.023 2.16e-12 ***
+# landuse_factorDeciduous       0.242579   0.053416   4.541 5.59e-06 ***
+# landuse_factorMixed           0.033149   0.032871   1.008  0.31324    
+# landuse_factorOpen/shrub/bog  0.046538   0.039024   1.193  0.23305    
+# landuse_factorNew forest      0.360495   0.027393  13.160  < 2e-16 ***
+
 # ---- crossing with landuse interaction -----
 
 # Model for major roads only 
@@ -1663,7 +1703,33 @@ TMBStruc_minor$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm_minor <- glmmTMB:::fitTMB(TMBStruc_minor)
 summary(model_glmm_minor)
 
-
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404887.3  405041.5 -202428.6  404857.3    216421 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.584e-01    0.3979
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                     -3.134067   7.132365  -0.439    0.660    
+# log_sl_                                          0.129696   0.007893  16.431  < 2e-16 ***
+# cos_ta_                                          0.003916   0.007508   0.522    0.602    
+# crosses_minorTRUE                                0.827793   0.792521   1.045    0.296    
+# landuse_factorHuman-modified                    -0.346678   0.045641  -7.596 3.06e-14 ***
+# landuse_factorDeciduous                          0.238571   0.053403   4.467 7.92e-06 ***
+# landuse_factorMixed                              0.030468   0.032836   0.928    0.353    
+# landuse_factorOpen/shrub/bog                     0.045672   0.038953   1.172    0.241    
+# landuse_factorNew forest                         0.362230   0.027372  13.234  < 2e-16 ***
+# crosses_minorTRUE:landuse_factorHuman-modified  -0.376107   0.840768  -0.447    0.655    
+# crosses_minorTRUE:landuse_factorDeciduous       -6.670864  36.615272  -0.182    0.855    
+# crosses_minorTRUE:landuse_factorMixed           -0.531118   0.910766  -0.583    0.560    
+# crosses_minorTRUE:landuse_factorOpen/shrub/bog -11.515398 137.840339  -0.084    0.933    
+# crosses_minorTRUE:landuse_factorNew forest      -0.397274   0.886014  -0.448    0.654 
 
 
 
@@ -1679,6 +1745,35 @@ TMBStruc_local$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm_local <- glmmTMB:::fitTMB(TMBStruc_local)
 summary(model_glmm_local)
 
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404791.3  404945.6 -202380.7  404761.3    216421 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.526e-01    0.3907
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                                 Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                    -3.033812   7.132235  -0.425  0.67057    
+# log_sl_                                         0.143855   0.008063  17.840  < 2e-16 ***
+# cos_ta_                                         0.006728   0.007518   0.895  0.37082    
+# crosses_localTRUE                              -0.487034   0.106486  -4.574 4.79e-06 ***
+# landuse_factorHuman-modified                   -0.311997   0.046971  -6.642 3.09e-11 ***
+# landuse_factorDeciduous                         0.243007   0.053949   4.504 6.66e-06 ***
+# landuse_factorMixed                             0.036068   0.033472   1.078  0.28122    
+# landuse_factorOpen/shrub/bog                    0.045872   0.039909   1.149  0.25039    
+# landuse_factorNew forest                        0.344017   0.027925  12.319  < 2e-16 ***
+# crosses_localTRUE:landuse_factorHuman-modified -0.043880   0.140148  -0.313  0.75421    
+# crosses_localTRUE:landuse_factorDeciduous      -0.064051   0.267828  -0.239  0.81099    
+# crosses_localTRUE:landuse_factorMixed          -0.048188   0.141362  -0.341  0.73319    
+# crosses_localTRUE:landuse_factorOpen/shrub/bog  0.057982   0.162816   0.356  0.72175    
+# crosses_localTRUE:landuse_factorNew forest      0.397495   0.126559   3.141  0.00168 ** 
+
 # Model for state roads only (major + minor)
 TMBStruc_state <- glmmTMB(
   case_ ~ log_sl_ + cos_ta_ + 
@@ -1691,6 +1786,33 @@ TMBStruc_state$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm_state <- glmmTMB:::fitTMB(TMBStruc_state)
 summary(model_glmm_state)
 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404875.7  405029.9 -202422.8  404845.7    216421 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.622e-01    0.4027
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                     -3.060150   7.132441  -0.429  0.66789    
+# log_sl_                                          0.132360   0.007911  16.731  < 2e-16 ***
+# cos_ta_                                          0.004402   0.007509   0.586  0.55773    
+# crosses_stateTRUE                               -0.941005   0.351594  -2.676  0.00744 ** 
+# landuse_factorHuman-modified                    -0.344694   0.045702  -7.542 4.62e-14 ***
+# landuse_factorDeciduous                          0.239500   0.053468   4.479 7.49e-06 ***
+# landuse_factorMixed                              0.029806   0.032848   0.907  0.36420    
+# landuse_factorOpen/shrub/bog                     0.041836   0.038966   1.074  0.28298    
+# landuse_factorNew forest                         0.358799   0.027405  13.092  < 2e-16 ***
+# crosses_stateTRUE:landuse_factorHuman-modified   0.596169   0.442612   1.347  0.17800    
+# crosses_stateTRUE:landuse_factorDeciduous       -9.651756 131.037503  -0.074  0.94128    
+# crosses_stateTRUE:landuse_factorMixed            0.153345   0.552349   0.278  0.78130    
+# crosses_stateTRUE:landuse_factorOpen/shrub/bog   0.057800   0.809374   0.071  0.94307    
+# crosses_stateTRUE:landuse_factorNew forest       0.834671   0.439109   1.901  0.05732 . 
 
 #------------------------------------------------------------------season 2: with crossing --------------------------
 # Define GLMM structure without fitting
@@ -1745,6 +1867,105 @@ summary(model_glmm33)
 # crosses_majorTRUE:factor(season)Winter  -1.533119   0.697401  -2.198 0.027925 *  
 # crosses_localTRUE:factor(season)Summer  -0.090096   0.105826  -0.851 0.394569    
 # crosses_localTRUE:factor(season)Winter  -0.298422   0.114455  -2.607 0.009125 ** 
+
+TMBStruc33.1 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    crosses_state + crosses_local + 
+    landuse_factor +
+    factor(season):crosses_state + factor(season):crosses_local +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc33.1$parameters$theta[1] = log(1e3)  
+
+TMBStruc33.1$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm33.1 <- glmmTMB:::fitTMB(TMBStruc33.1)
+
+summary(model_glmm33.1)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404801.3  404976.1 -202383.6  404767.3    216419 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.782e-01    0.4221
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                          Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                             -2.798896  11.607314  -0.241   0.8095    
+# log_sl_                                  0.145951   0.008085  18.052  < 2e-16 ***
+# cos_ta_                                  0.007143   0.007518   0.950   0.3421    
+# crosses_stateTRUE                       -0.461608   0.231307  -1.996   0.0460 *  
+# crosses_localTRUE                       -0.481880   0.072439  -6.652 2.89e-11 ***
+# landuse_factorHuman-modified            -0.320839   0.045728  -7.016 2.28e-12 ***
+# landuse_factorDeciduous                  0.242201   0.053398   4.536 5.74e-06 ***
+# landuse_factorMixed                      0.033526   0.032870   1.020   0.3078    
+# landuse_factorOpen/shrub/bog             0.046380   0.039025   1.188   0.2347    
+# landuse_factorNew forest                 0.360306   0.027393  13.153  < 2e-16 ***
+# crosses_stateFALSE:factor(season)Summer -0.333922  16.439546  -0.020   0.9838    
+# crosses_stateTRUE:factor(season)Summer  -0.773003  16.444946  -0.047   0.9625    
+# crosses_stateFALSE:factor(season)Spring -0.418961  18.434138  -0.023   0.9819    
+# crosses_stateTRUE:factor(season)Spring  -0.235523  18.437575  -0.013   0.9898    
+# crosses_localTRUE:factor(season)Summer   0.125895   0.101196   1.244   0.2135    
+# crosses_localTRUE:factor(season)Spring   0.188938   0.112711   1.676   0.0937 . 
+
+
+TMBStruc33.2 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    crosses_state + crosses_local + 
+    landuse_factor +
+    factor(season):crosses_local +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc33.2$parameters$theta[1] = log(1e3)  
+
+TMBStruc33.2$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm33.2 <- glmmTMB:::fitTMB(TMBStruc33.2)
+
+summary(model_glmm33.2)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404799.4  404953.6 -202384.7  404769.4    216421 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.793e-01    0.4234
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                          Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                             -2.706548  11.607278  -0.233  0.81562    
+# log_sl_                                  0.145976   0.008085  18.055  < 2e-16 ***
+# cos_ta_                                  0.007176   0.007518   0.954  0.33985    
+# crosses_stateTRUE                       -0.507398   0.157490  -3.222  0.00127 ** 
+# crosses_localTRUE                       -0.481597   0.072430  -6.649 2.95e-11 ***
+# landuse_factorHuman-modified            -0.320364   0.045720  -7.007 2.43e-12 ***
+# landuse_factorDeciduous                  0.242304   0.053407   4.537 5.71e-06 ***
+# landuse_factorMixed                      0.033548   0.032869   1.021  0.30742    
+# landuse_factorOpen/shrub/bog             0.046240   0.039024   1.185  0.23605    
+# landuse_factorNew forest                 0.360364   0.027391  13.156  < 2e-16 ***
+# crosses_localFALSE:factor(season)Summer -0.563057  16.439494  -0.034  0.97268    
+# crosses_localTRUE:factor(season)Summer  -0.440928  16.439781  -0.027  0.97860    
+# crosses_localFALSE:factor(season)Spring -0.425244  18.434145  -0.023  0.98160    
+# crosses_localTRUE:factor(season)Spring  -0.233712  18.434462  -0.013  0.98988    
 
 # ---------------------------------------------------------- time 2: with crossings -----------------------
 TMBStruc44 <- glmmTMB(
@@ -1956,6 +2177,56 @@ summary(model_glmm55)
 # crosses_stateTRUE:factor(time_category)Twilight   0.517331  22.574208   0.023  0.98172    
 # crosses_localTRUE:factor(time_category)Night     -0.046512   0.095223  -0.488  0.62523    
 # crosses_localTRUE:factor(time_category)Twilight   0.344776   0.139541   2.471  0.01348 *  
+
+# remove 1 non-significant
+
+TMBStruc55.1 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    crosses_state+ crosses_local + 
+    landuse_factor +
+    factor(time_category):crosses_local +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc55.1$parameters$theta[1] = log(1e3)  
+
+TMBStruc55.1$mapArg = list(theta = factor(c(NA, 1)))
+
+model_glmm55.1 <- glmmTMB:::fitTMB(TMBStruc55.1)
+
+summary(model_glmm55.1)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404796.1  404950.4 -202383.0  404766.1    216421 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.733e-01    0.4163
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                                   Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                                      -2.784755  10.142974  -0.275   0.7837    
+# log_sl_                                           0.146043   0.008086  18.061  < 2e-16 ***
+# cos_ta_                                           0.007193   0.007519   0.957   0.3387    
+# crosses_stateTRUE                                -0.506580   0.157540  -3.216   0.0013 ** 
+# crosses_localTRUE                                -0.428225   0.073241  -5.847 5.01e-09 ***
+# landuse_factorHuman-modified                     -0.321348   0.045714  -7.030 2.07e-12 ***
+# landuse_factorDeciduous                           0.243212   0.053420   4.553 5.29e-06 ***
+# landuse_factorMixed                               0.033346   0.032872   1.014   0.3104    
+# landuse_factorOpen/shrub/bog                      0.046441   0.039028   1.190   0.2341    
+# landuse_factorNew forest                          0.360644   0.027394  13.165  < 2e-16 ***
+# crosses_localFALSE:factor(time_category)Night    -0.515498  15.372696  -0.034   0.9732    
+# crosses_localTRUE:factor(time_category)Night     -0.519416  15.372969  -0.034   0.9730    
+# crosses_localFALSE:factor(time_category)Twilight -0.328817  22.568371  -0.015   0.9884    
+# crosses_localTRUE:factor(time_category)Twilight  -0.003266  22.568761   0.000   0.9999   
 
 ```
 
@@ -2387,7 +2658,7 @@ ggplot(ratio_df, aes(x = dist_band, y = selection_strength,
 
 
 
-```{r crossing model visualisation ...}
+```{r crossing model visualisation}
 
 # Calculate RSS values for each landuse type and crossing status
 landuse_levels <- levels(steps3$landuse_factor)
@@ -2466,87 +2737,70 @@ ggplot(rss_data, aes(x = x_jitter, y = y_jitter, shape = landuse, color = landus
 
 
 
+```{r probability with CI: time;season;land use; basic}
 
-```{r joining CI and RSS visualisations}
-
-# 1. Function to calculate time predictions with confidence intervals
-calculate_time_ci <- function(model, data, road_var, max_dist = 2000) {
+# Function for basic model with no interactions
+calculate_basic_ci <- function(model, data, road_var, max_dist = 2000) {
   # Get scaling parameters
   var_center <- attr(data[[road_var]], "scaled:center")
   var_scale <- attr(data[[road_var]], "scaled:scale")
   
-  # Extract coefficients and variance-covariance matrix
+  # Extract coefficients and variance
   coefs <- fixef(model)$cond
   vcov_matrix <- vcov(model)$cond
-  main_coef <- coefs[road_var]
-  main_se <- sqrt(diag(vcov_matrix)[road_var])
+  effect <- coefs[road_var]
+  effect_se <- sqrt(diag(vcov_matrix)[road_var])
   
   # Create distance sequence
   dist_seq <- seq(0, max_dist, length.out = 100)
   scaled_seq <- (dist_seq - var_center) / var_scale
   
-  # For each time category
-  time_cats <- c("Day", "Night", "Twilight")
-  all_predictions <- data.frame()
+  # Calculate linear predictor and CI
+  linear_pred <- scaled_seq * effect
+  linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
+  linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
   
-  for (time_cat in time_cats) {
-    # Calculate effect and SE for this time category
-    if (time_cat == "Day") {
-      effect <- main_coef
-      effect_se <- main_se
-    } else {
-      interaction_name <- paste0(road_var, ":factor(time_category)", time_cat)
-      if (interaction_name %in% names(coefs)) {
-        effect <- main_coef + coefs[interaction_name]
-        # Calculate combined SE
-        interaction_se <- sqrt(diag(vcov_matrix)[interaction_name])
-        # Check if covariance is available
-        if(road_var %in% rownames(vcov_matrix) && interaction_name %in% colnames(vcov_matrix)) {
-          covar <- vcov_matrix[road_var, interaction_name]
-        } else {
-          covar <- 0
-        }
-        effect_se <- sqrt(main_se^2 + interaction_se^2 + 2*covar)
-      } else {
-        effect <- main_coef
-        effect_se <- main_se
-      }
-    }
-    
-    # Calculate linear predictor and CIs
-    linear_pred <- scaled_seq * effect
-    linear_ci_lower <- linear_pred - 1.96 * (abs(scaled_seq) * effect_se)
-    linear_ci_upper <- linear_pred + 1.96 * (abs(scaled_seq) * effect_se)
-    
-    # Calculate selection strength and probability with CIs
-    rss <- exp(linear_pred)
-    rss_lower <- exp(linear_ci_lower)
-    rss_upper <- exp(linear_ci_upper)
-    
-    prob <- rss / (rss + 10)
-    prob_lower <- rss_lower / (rss_lower + 10)
-    prob_upper <- rss_upper / (rss_upper + 10)
-    
-    # Create results data frame
-    time_results <- data.frame(
-      distance = dist_seq,
-      rss = rss,
-      rss_lower = rss_lower,
-      rss_upper = rss_upper,
-      probability = prob,
-      prob_lower = prob_lower,
-      prob_upper = prob_upper,
-      time_category = time_cat
-    )
-    
-    # Add to all predictions
-    all_predictions <- rbind(all_predictions, time_results)
-  }
+  # Calculate RSS and probability
+  rss <- exp(linear_pred)
+  rss_lower <- exp(linear_ci_lower)
+  rss_upper <- exp(linear_ci_upper)
   
-  return(all_predictions)
+  prob <- rss / (rss + 10)
+  prob_lower <- rss_lower / (rss_lower + 10)
+  prob_upper <- rss_upper / (rss_upper + 10)
+  
+  # Store results
+  results <- data.frame(
+    distance = dist_seq,
+    probability = prob,
+    prob_lower = prob_lower,
+    prob_upper = prob_upper
+  )
+  
+  return(results)
 }
 
-# 2. Function to calculate season predictions with confidence intervals
+# Plot function for basic model
+plot_basic <- function(predictions, road_var = "state_d") {
+  road_label <- ifelse(grepl("state", road_var), "State Roads", "Local Roads")
+  
+  ggplot(predictions, aes(x = distance, y = probability)) +
+    geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper), 
+                alpha = 0.3, fill = "#1976D2") +
+    geom_line(size = 1.2, color = "#1976D2") +
+    geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
+    labs(x = paste0("Distance to ", road_label, " (m)"),
+         y = "Selection Probability",
+         title = paste0("Moose Selection Probability vs. Distance from ", road_label),
+         subtitle = "Basic effect with 95% confidence intervals") +
+    theme_minimal() +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(face = "bold")
+    )
+}
+
+# Function for seasonal models
 calculate_season_ci <- function(model, data, road_var, max_dist = 2000) {
   # Get scaling parameters
   var_center <- attr(data[[road_var]], "scaled:center")
@@ -2555,50 +2809,44 @@ calculate_season_ci <- function(model, data, road_var, max_dist = 2000) {
   # Extract coefficients and variance-covariance matrix
   coefs <- fixef(model)$cond
   vcov_matrix <- vcov(model)$cond
-  main_coef <- coefs[road_var]
-  main_se <- sqrt(diag(vcov_matrix)[road_var])
   
   # Create distance sequence
   dist_seq <- seq(0, max_dist, length.out = 100)
   scaled_seq <- (dist_seq - var_center) / var_scale
   
-  # Get all season levels and reference level
-  all_seasons <- levels(data$season)
-  ref_level <- all_seasons[1]
-  
-  # For each season
+  # Define season categories
+  season_cats <- levels(data$season)
   all_predictions <- data.frame()
   
-  for (season_cat in all_seasons) {
+  # For each season
+  for (season_cat in season_cats) {
     # Calculate effect and SE for this season
-    if (season_cat == ref_level) {
-      effect <- main_coef
-      effect_se <- main_se
+    if (season_cat == "Winter") {  # Assuming Winter is the reference level
+      effect <- coefs[road_var]
+      effect_se <- sqrt(diag(vcov_matrix)[road_var])
     } else {
-      interaction_name <- paste0(road_var, ":factor(season)", season_cat)
-      if (interaction_name %in% names(coefs)) {
-        effect <- main_coef + coefs[interaction_name]
-        # Calculate combined SE
-        interaction_se <- sqrt(diag(vcov_matrix)[interaction_name])
-        # Check if covariance is available
-        if(road_var %in% rownames(vcov_matrix) && interaction_name %in% colnames(vcov_matrix)) {
-          covar <- vcov_matrix[road_var, interaction_name]
-        } else {
-          covar <- 0
-        }
-        effect_se <- sqrt(main_se^2 + interaction_se^2 + 2*covar)
-      } else {
-        effect <- main_coef
-        effect_se <- main_se
+      # Get the correct interaction term name
+      interaction_name <- paste0(road_var, ":season", season_cat)
+      if (!(interaction_name %in% names(coefs))) {
+        interaction_name <- paste0(road_var, ":factor(season)", season_cat)
       }
+      
+      # Calculate the combined effect
+      effect <- coefs[road_var] + coefs[interaction_name]
+      
+      # Calculate standard error for combined effect
+      main_se <- sqrt(diag(vcov_matrix)[road_var])
+      int_se <- sqrt(diag(vcov_matrix)[interaction_name])
+      covar <- vcov_matrix[road_var, interaction_name]
+      effect_se <- sqrt(main_se^2 + int_se^2 + 2*covar)
     }
     
     # Calculate linear predictor and CIs
     linear_pred <- scaled_seq * effect
-    linear_ci_lower <- linear_pred - 1.96 * (abs(scaled_seq) * effect_se)
-    linear_ci_upper <- linear_pred + 1.96 * (abs(scaled_seq) * effect_se)
+    linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
+    linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
     
-    # Calculate selection strength and probability with CIs
+    # Calculate RSS and probability
     rss <- exp(linear_pred)
     rss_lower <- exp(linear_ci_lower)
     rss_upper <- exp(linear_ci_upper)
@@ -2610,9 +2858,6 @@ calculate_season_ci <- function(model, data, road_var, max_dist = 2000) {
     # Store results
     season_results <- data.frame(
       distance = dist_seq,
-      rss = rss,
-      rss_lower = rss_lower,
-      rss_upper = rss_upper,
       probability = prob,
       prob_lower = prob_lower,
       prob_upper = prob_upper,
@@ -2625,84 +2870,12 @@ calculate_season_ci <- function(model, data, road_var, max_dist = 2000) {
   return(all_predictions)
 }
 
-# 3. Function to calculate basic predictions with confidence intervals
-calculate_basic_ci <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters
-  var_center <- attr(data[[road_var]], "scaled:center")
-  var_scale <- attr(data[[road_var]], "scaled:scale")
-  
-  # Extract coefficients and variance-covariance matrix
-  coefs <- fixef(model)$cond
-  vcov_matrix <- vcov(model)$cond
-  effect <- coefs[road_var]
-  effect_se <- sqrt(diag(vcov_matrix)[road_var])
-  
-  # Create distance sequence
-  dist_seq <- seq(0, max_dist, length.out = 100)
-  scaled_seq <- (dist_seq - var_center) / var_scale
-  
-  # Calculate linear predictor and CIs
-  linear_pred <- scaled_seq * effect
-  linear_ci_lower <- linear_pred - 1.96 * (abs(scaled_seq) * effect_se)
-  linear_ci_upper <- linear_pred + 1.96 * (abs(scaled_seq) * effect_se)
-  
-  # Calculate selection strength and probability with CIs
-  rss <- exp(linear_pred)
-  rss_lower <- exp(linear_ci_lower)
-  rss_upper <- exp(linear_ci_upper)
-  
-  prob <- rss / (rss + 10)
-  prob_lower <- rss_lower / (rss_lower + 10)
-  prob_upper <- rss_upper / (rss_upper + 10)
-  
-  # Store results
-  results <- data.frame(
-    distance = dist_seq,
-    rss = rss,
-    rss_lower = rss_lower,
-    rss_upper = rss_upper,
-    probability = prob,
-    prob_lower = prob_lower,
-    prob_upper = prob_upper
-  )
-  
-  return(results)
-}
-
-# 4. Plot time predictions with facets
-plot_time_facet <- function(predictions, road_type = "state") {
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
-  time_colors <- c("Day" = "#FFC107", "Night" = "#303F9F", "Twilight" = "#7B1FA2")
-  
-  p <- ggplot(predictions, aes(x = distance, y = probability, color = time_category)) +
-    geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper, fill = time_category), 
-                alpha = 0.3, color = NA) +
-    geom_line(size = 1.2) +
-    geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
-    facet_wrap(~ time_category, nrow = 1) +
-    labs(x = paste0("Distance to ", road_label, " (m)"),
-         y = "Selection Probability",
-         title = paste0("Moose Selection Probability vs. Distance from ", road_label),
-         subtitle = "By time of day with 95% confidence intervals") +
-    theme_minimal() +
-    theme(
-      legend.position = "none",
-      panel.grid.minor = element_blank(),
-      strip.text = element_text(size = 12, face = "bold"),
-      plot.title = element_text(face = "bold")
-    ) +
-    scale_color_manual(values = time_colors) +
-    scale_fill_manual(values = time_colors)
-  
-  return(p)
-}
-
-# 5. Plot season predictions with facets
-plot_season_facet <- function(predictions, road_type = "state") {
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
+# Plot function for seasonal model
+plot_season_facet <- function(predictions, road_var = "state_d") {
+  road_label <- ifelse(grepl("state", road_var), "State Roads", "Local Roads")
   season_colors <- c("Winter" = "#2196F3", "Spring" = "#4CAF50", "Summer" = "#FF9800")
   
-  p <- ggplot(predictions, aes(x = distance, y = probability, color = season)) +
+  ggplot(predictions, aes(x = distance, y = probability, color = season)) +
     geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper, fill = season), 
                 alpha = 0.3, color = NA) +
     geom_line(size = 1.2) +
@@ -2721,186 +2894,255 @@ plot_season_facet <- function(predictions, road_type = "state") {
     ) +
     scale_color_manual(values = season_colors) +
     scale_fill_manual(values = season_colors)
-  
-  return(p)
-}
-
-# 6. Plot basic predictions
-plot_basic <- function(predictions, road_type = "state") {
-  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
-  
-  p <- ggplot(predictions, aes(x = distance, y = probability)) +
-    geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper), 
-                alpha = 0.3, fill = "#1976D2") +
-    geom_line(size = 1.2, color = "#1976D2") +
-    geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
-    labs(x = paste0("Distance to ", road_label, " (m)"),
-         y = "Selection Probability",
-         title = paste0("Moose Selection Probability vs. Distance from ", road_label),
-         subtitle = "With 95% confidence intervals") +
-    theme_minimal() +
-    theme(
-      panel.grid.minor = element_blank(),
-      panel.border = element_rect(fill = NA, color = "gray80"),
-      plot.title = element_text(face = "bold")
-    )
-  
-  return(p)
 }
 
 
-# Create plots for time model (model_glmm3.0.1)
-# State roads
-state_time_preds <- calculate_time_ci(model_glmm3.0.1, steps3, "state_d")
-state_time_plot <- plot_time_facet(state_time_preds, "state")
 
-# Local roads
-local_time_preds <- calculate_time_ci(model_glmm3.0.1, steps3, "local_d")
-local_time_plot <- plot_time_facet(local_time_preds, "local")
-
-# Create plots for season model (model_glmm2.0)
-# State roads
-state_season_preds <- calculate_season_ci(model_glmm2.0.2, steps3, "state_d")
-state_season_plot <- plot_season_facet(state_season_preds, "state")
-
-# Local roads
-local_season_preds <- calculate_season_ci(model_glmm2.0.2, steps3, "local_d")
-local_season_plot <- plot_season_facet(local_season_preds, "local")
-
-# Create plots for basic model (model_glmm1.1.1)
-# State roads
-state_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "state_d")
-state_basic_plot <- plot_basic(state_basic_preds, "state")
-
-# Local roads
-local_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "local_d")
-local_basic_plot <- plot_basic(local_basic_preds, "local")
-
-# Display individual plots
-state_time_plot
-local_time_plot
-state_season_plot
-local_season_plot
-state_basic_plot
-local_basic_plot
-
-# # Arrange plots in a grid if needed
-# time_plots <- grid.arrange(state_time_plot, local_time_plot, 
-#                          nrow = 2, top = "Moose Road Selection by Time of Day")
-# 
-# season_plots <- grid.arrange(state_season_plot, local_season_plot,
-#                            nrow = 2, top = "Moose Road Selection by Season")
-# 
-# basic_plots <- grid.arrange(state_basic_plot, local_basic_plot,
-#                           nrow = 2, top = "Moose Road Selection - Basic Model")
-
-# Save plots if needed
-# ggsave("time_plots.png", time_plots, width = 12, height = 8)
-# ggsave("season_plots.png", season_plots, width = 12, height = 8)
-# ggsave("basic_plots.png", basic_plots, width = 12, height = 8)
-
-```
-
-
-```{r prediction plots}
-
-
-library(ggplot2)
-
-# Prediction function for state roads across all time periods
-create_time_predictions <- function(model_object, state_d_center, state_d_scale, max_dist = 2500) {
-  # Get coefficients directly from the model object (based on your output)
-  beta_state_d <- model_object$fit$par[3]  # State_d base effect (day)
-  beta_night_interaction <- model_object$fit$par[10]  # Night interaction 
-  beta_twilight_interaction <- model_object$fit$par[11]  # Twilight interaction
+# 1. Function to calculate time predictions with confidence intervals
+calculate_time_ci <- function(model, data, road_var, max_dist = 2000) {
+  # Get scaling parameters
+  var_center <- attr(data[[road_var]], "scaled:center")
+  var_scale <- attr(data[[road_var]], "scaled:scale")
   
-  # Create distance sequence in original units
-  distances <- seq(0, max_dist, length.out = 100)
+  # Extract coefficients and variance-covariance matrix
+  coefs <- fixef(model)$cond
+  vcov_matrix <- vcov(model)$cond
   
-  # Scale the distances to match your model's scaling
-  scaled_distances <- (distances - state_d_center) / state_d_scale
-  
-  # Calculate effects for each time period
-  day_effect <- beta_state_d
-  night_effect <- beta_state_d + beta_night_interaction
-  twilight_effect <- beta_state_d + beta_twilight_interaction
-  
-  # Create empty data frame to store all predictions
-  all_predictions <- data.frame()
+  # Create distance sequence
+  dist_seq <- seq(0, max_dist, length.out = 100)
+  scaled_seq <- (dist_seq - var_center) / var_scale
   
   # For each time category
-  for (time_cat in c("Day", "Night", "Twilight")) {
-    # Select the appropriate effect
+  time_cats <- c("Day", "Night", "Twilight")
+  all_predictions <- data.frame()
+  
+  for (time_cat in time_cats) {
+    # Calculate effect and SE for this time category
     if (time_cat == "Day") {
-      effect <- day_effect
-    } else if (time_cat == "Night") {
-      effect <- night_effect
-    } else { # Twilight
-      effect <- twilight_effect
+      effect <- coefs[road_var]
+      effect_se <- sqrt(diag(vcov_matrix)[road_var])
+    } else {
+      interaction_name <- paste0(road_var, ":factor(time_category)", time_cat)
+      effect <- coefs[road_var] + coefs[interaction_name]
+      
+      # Calculate standard error for combined effect
+      main_se <- sqrt(diag(vcov_matrix)[road_var])
+      int_se <- sqrt(diag(vcov_matrix)[interaction_name])
+      covar <- vcov_matrix[road_var, interaction_name]
+      effect_se <- sqrt(main_se^2 + int_se^2 + 2*covar)
     }
     
-    # Calculate linear predictor (log scale)
-    linear_pred <- scaled_distances * effect
+    # Calculate linear predictor, selection strength, and probability
+    linear_pred <- scaled_seq * effect
+    linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
+    linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
     
-    # Convert to response scale (exp for Poisson)
-    response <- exp(linear_pred)
+    # Calculate RSS and probability
+    rss <- exp(linear_pred)
+    rss_lower <- exp(linear_ci_lower)
+    rss_upper <- exp(linear_ci_upper)
     
-    # Normalize within each time period
-    relative_prob <- response / max(response)
+    prob <- rss / (rss + 10)
+    prob_lower <- rss_lower / (rss_lower + 10)
+    prob_upper <- rss_upper / (rss_upper + 10)
     
-    # Create data frame for this time period
-    time_data <- data.frame(
-      distance = distances,
-      probability = relative_prob,
+    # Store results
+    time_results <- data.frame(
+      distance = dist_seq,
+      probability = prob,
+      prob_lower = prob_lower,
+      prob_upper = prob_upper,
       time_category = time_cat
     )
     
-    # Add to the combined data frame
-    all_predictions <- rbind(all_predictions, time_data)
+    all_predictions <- rbind(all_predictions, time_results)
   }
   
-  # Convert time_category to factor with desired order
-  all_predictions$time_category <- factor(all_predictions$time_category, 
-                                        levels = c("Day", "Night", "Twilight"))
-  
-  # Create plot
-  p <- ggplot(all_predictions, aes(x = distance, y = probability, 
-                                  color = time_category, linetype = time_category)) +
-    geom_line(size = 1.2) +
-    scale_color_manual(values = c("Day" = "#FFC107", "Night" = "#3F51B5", "Twilight" = "#9C27B0")) +
-    scale_linetype_manual(values = c("Day" = "solid", "Night" = "dashed", "Twilight" = "dotted")) +
-    labs(
-      title = "Moose Selection Probability vs. Distance from State Roads",
-      x = "Distance (m)",
-      y = "Relative Probability",
-      color = "Time of Day",
-      linetype = "Time of Day"
-    ) +
-    theme_minimal() +
-    theme(
-      legend.position = "bottom",
-      panel.grid.minor = element_blank(),
-      plot.title = element_text(face = "bold")
-    )
-  
-  # Return both the data and the plot
-  return(list(data = all_predictions, plot = p))
+  return(all_predictions)
 }
 
-# Example usage:
-# These are the scaling parameters from your model
-state_d_center <- 1895
-state_d_scale <- 1175
+# 2. Plot time predictions with facets
+plot_time_facet <- function(predictions, road_type = "state") {
+  road_label <- ifelse(road_type == "state", "State Roads", "Local Roads")
+  time_colors <- c("Day" = "#FFC107", "Night" = "#303F9F", "Twilight" = "#7B1FA2")
+  
+  ggplot(predictions, aes(x = distance, y = probability, color = time_category)) +
+    geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper, fill = time_category), 
+                alpha = 0.3, color = NA) +
+    geom_line(size = 1.2) +
+    geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
+    facet_wrap(~ time_category, nrow = 1) +
+    labs(x = paste0("Distance to ", road_label, " (m)"),
+         y = "Selection Probability",
+         title = paste0("Moose Selection Probability vs. Distance from ", road_label),
+         subtitle = "By time of day with 95% confidence intervals") +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(size = 12, face = "bold"),
+      plot.title = element_text(face = "bold")
+    ) +
+    scale_color_manual(values = time_colors) +
+    scale_fill_manual(values = time_colors)
+}
 
-# Generate the prediction and plot
-result <- create_time_predictions(model_glmm3.0.1, state_d_center, state_d_scale)
+# Updated function for land use interaction models
+calculate_landuse_ci <- function(model, data, road_var, max_dist = 2000) {
+  # Get scaling parameters
+  var_center <- attr(data[[road_var]], "scaled:center")
+  var_scale <- attr(data[[road_var]], "scaled:scale")
+  
+  # Extract coefficients and variance-covariance matrix
+  coefs <- fixef(model)$cond
+  vcov_matrix <- vcov(model)$cond
+  
+  # Create distance sequence
+  dist_seq <- seq(0, max_dist, length.out = 100)
+  scaled_seq <- (dist_seq - var_center) / var_scale
+  
+  # Define landuse categories (using actual factor levels)
+  landuse_cats <- levels(data$landuse_factor)
+  all_predictions <- data.frame()
+  
+  # For each landuse category
+  for (landuse_cat in landuse_cats) {
+    # Calculate effect and SE for this landuse type
+    if (landuse_cat == "Coniferous") {  # Assuming Coniferous is reference level
+      effect <- coefs[road_var]
+      effect_se <- sqrt(diag(vcov_matrix)[road_var])
+    } else {
+      # Get the correct interaction term name
+      interaction_name <- paste0(road_var, ":landuse_factor", landuse_cat)
+      
+      # Calculate the combined effect (if interaction exists)
+      if (interaction_name %in% names(coefs)) {
+        effect <- coefs[road_var] + coefs[interaction_name]
+        
+        # Calculate standard error for combined effect
+        main_se <- sqrt(diag(vcov_matrix)[road_var])
+        int_se <- sqrt(diag(vcov_matrix)[interaction_name])
+        
+        # Safely get covariance
+        if (road_var %in% rownames(vcov_matrix) && 
+            interaction_name %in% colnames(vcov_matrix)) {
+          covar <- vcov_matrix[road_var, interaction_name]
+        } else {
+          covar <- 0
+        }
+        
+        effect_se <- sqrt(main_se^2 + int_se^2 + 2*covar)
+      } else {
+        # If no interaction, use base effect
+        effect <- coefs[road_var]
+        effect_se <- sqrt(diag(vcov_matrix)[road_var])
+      }
+    }
+    
+    # Calculate linear predictor and CIs
+    linear_pred <- scaled_seq * effect
+    linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
+    linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
+    
+    # Calculate RSS and probability
+    rss <- exp(linear_pred)
+    rss_lower <- exp(linear_ci_lower)
+    rss_upper <- exp(linear_ci_upper)
+    
+    prob <- rss / (rss + 10)
+    prob_lower <- rss_lower / (rss_lower + 10)
+    prob_upper <- rss_upper / (rss_upper + 10)
+    
+    # Store results
+    landuse_results <- data.frame(
+      distance = dist_seq,
+      probability = prob,
+      prob_lower = prob_lower,
+      prob_upper = prob_upper,
+      landuse = landuse_cat
+    )
+    
+    all_predictions <- rbind(all_predictions, landuse_results)
+  }
+  
+  return(all_predictions)
+}
 
-result$plot
+# Updated plot function to include confidence intervals
+plot_landuse_facet <- function(predictions, road_var = "state_d") {
+  road_label <- ifelse(grepl("state", road_var), "State Roads", "Local Roads")
+  
+  # Define colors for different landuse types
+  landuse_colors <- c(
+    "Coniferous" = "#2E7D32",        # Dark green
+    "Mixed" = "#558B2F",             # Medium green
+    "Deciduous" = "#8BC34A",         # Light green
+    "Open/shrub/bog" = "#FDD835",    # Yellow
+    "New forest" = "#81C784",        # Pale green
+    "Human-modified" = "#E57373"     # Red
+  )
+  
+  ggplot(predictions, aes(x = distance, y = probability, color = landuse)) +
+    geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper, fill = landuse), 
+                alpha = 0.2, color = NA) +
+    geom_line(size = 1.2) +
+    geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
+    facet_wrap(~ landuse, nrow = 2) +
+    labs(x = paste0("Distance to ", road_label, " (m)"),
+         y = "Selection Probability",
+         title = paste0("Moose Selection Probability vs. Distance from ", road_label),
+         subtitle = "By land use type with 95% confidence intervals") +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(size = 10, face = "bold"),
+      plot.title = element_text(face = "bold")
+    ) +
+    scale_color_manual(values = landuse_colors) +
+    scale_fill_manual(values = landuse_colors)
+}
 
-# Display the plot (in R, you would just use: print(result$plot))
 
-# Access the data if needed
-# head(result$data)
+# 1. Time of Day effect (using model_glmm3.0.1)
+state_time_preds <- calculate_time_ci(model_glmm3.0.1, steps3, "state_d")
+state_time_plot <- plot_time_facet(state_time_preds, "state_d")
+print(state_time_plot)
+
+local_time_preds <- calculate_time_ci(model_glmm3.0.1, steps3, "local_d")
+local_time_plot <- plot_time_facet(local_time_preds, "local_d")
+print(local_time_plot)
+
+# 2. Seasonal effect (using model_glmm2.0.3)
+state_season_preds <- calculate_season_ci(model_glmm2.0.2, steps3, "state_d")
+state_season_plot <- plot_season_facet(state_season_preds, "state_d")
+print(state_season_plot)
+
+local_season_preds <- calculate_season_ci(model_glmm2.0.3, steps3, "local_d")
+local_season_plot <- plot_season_facet(local_season_preds, "local_d")
+print(local_season_plot)
+
+# 3. Landuse interaction (using model_glmm_state.1 and model_glmm_local.1)
+state_landuse_preds <- calculate_landuse_ci(model_glmm_state.1, steps3, "state_d")
+state_landuse_plot <- plot_landuse_facet(state_landuse_preds, "state_d")
+print(state_landuse_plot)
+
+local_landuse_preds <- calculate_landuse_ci(model_glmm_local.1, steps3, "local_d")
+local_landuse_plot <- plot_landuse_facet(local_landuse_preds, "local_d")
+print(local_landuse_plot)
+
+# 4. Basic road effect (using model_glmm1.1.1)
+state_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "state_d")
+state_basic_plot <- plot_basic(state_basic_preds, "state_d")
+print(state_basic_plot)
+
+local_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "local_d")
+local_basic_plot <- plot_basic(local_basic_preds, "local_d")
+print(local_basic_plot)
+
+
 
 ```
+
+
 
