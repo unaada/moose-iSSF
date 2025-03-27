@@ -47,10 +47,42 @@ final <- final %>%
       interpolated_time >= night | interpolated_time < nightEnd  ~ "Night",
       .default = "Twilight"
       ),
-    crossing_time = lubridate::hms(interpolated_time)
+    crossing_time = lubridate::hms(interpolated_time),
+    month = lubridate::month(d_start, label = TRUE)
   )
 
-#visualise
+
+# -------------------------------------------------------------------------------- make summary for thesis -------------------------------
+summary_final <- final %>% 
+  mutate(
+    class_glmm = case_when(
+      new_class >0 ~ "State",
+      .default = "Local"
+    )
+  ) %>% 
+  dplyr::select(fid, class_glmm, time_category, month)
+
+
+# Assign seasons (with November in Winter)
+summary_final$season <- case_when(
+  summary_final$month %in% c("Nov", "Dec", "Jan", "Feb", "Mar") ~ "Winter",
+  summary_final$month %in% c("Apr", "May") ~ "Spring",
+  summary_final$month %in% c("Jun", "Jul", "Aug", "Sep", "Oct") ~ "Summer"
+)
+
+# Create tables in one step
+crossing_counts_state <- table(
+  Time = summary_final$time_category[summary_final$class_glmm == "State"],
+  Season = summary_final$season[summary_final$class_glmm == "State"]
+)
+
+crossing_counts_local <- table(
+  Time = summary_final$time_category[summary_final$class_glmm == "Local"],
+  Season = summary_final$season[summary_final$class_glmm == "Local"]
+)
+
+# ------------------------------------------------------------ visualise the crossings -----------------------------------
+
 
 coul <- brewer.pal(6, "BuPu")
 ggplot(final, aes(x = factor(new_class), fill = time_category)) +
@@ -256,13 +288,41 @@ daily_speeds <- daily_speeds[order(daily_speeds$date),]
 library(zoo)
 daily_speeds$ma7 <- rollmean(daily_speeds$speed_kph, 7, fill=NA)
 
-# Find where the moving average increases significantly
-# (e.g., where the 7-day average exceeds the overall average by 25%)
-overall_avg <- mean(daily_speeds$speed_kph, na.rm=TRUE)
-spring_idx <- which(daily_speeds$ma7 > overall_avg*1.2)[2]
-spring_cutoff_date <- daily_speeds$date[spring_idx]
-
 # Plot for visualization
 plot(daily_speeds$date, daily_speeds$speed_kph, type="l", 
      xlab="Date", ylab="Speed (kph)")
 lines(daily_speeds$date, daily_speeds$ma7, col="blue", lwd=2)
+
+
+
+# Create the plot
+ggplot(daily_speeds, aes(x=date)) +
+  # Add a subtle background grid
+  theme_minimal() +
+  
+  # Add the daily speed line
+  geom_line(aes(y=speed_kph, color="Daily Speed"), alpha=0.6) +
+  
+  # Add the 7-day moving average
+  geom_line(aes(y=ma7, color="7-day Moving Average"), size=1.2) +
+  
+  # Customize the colors
+  scale_color_manual(name="", 
+                     values=c("Daily Speed"="gray40", 
+                              "7-day Moving Average"="blue")) +
+  
+  # Customize the x-axis to show months properly
+  scale_x_date(date_breaks="1 month", date_labels="%b") +
+  
+  # Add labels and title
+  labs(title="Daily Movement Speed with 7-day Moving Average",
+       x="Month",
+       y="Speed (kph)") +
+  
+  # Adjust theme elements for better readability
+  theme(
+    axis.text.x = element_text(angle=0, hjust=0.5, size=10),
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust=0.5, size=14)
+  )

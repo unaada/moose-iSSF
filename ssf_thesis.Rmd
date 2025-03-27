@@ -1238,274 +1238,7 @@ summary(model_glmm3.0.1)
 ```{r other models}
 
 
-# -------------------------------------------------- models without scaling ----------------
 
-steps3_original$major_d <- steps3_original$major_d + 0.01
-steps3_original$minor_d <- steps3_original$minor_d + 0.01
-steps3_original$local_d <- steps3_original$local_d + 0.01
-steps3_original$state_d <- steps3_original$state_d + 0.01
-
-
-
-summary(steps3_original$state_d)
-
-
-TMBStruc_unscaled <- glmmTMB(
-  case_ ~ log(sl_) + cos(ta_) + 
-    log(major_d) + log(minor_d) + log(local_d) + 
-    landuse_factor +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3_original,
-  doFit = FALSE
-)
-
-TMBStruc_unscaled$parameters$theta[1] = log(1e3)  
-TMBStruc_unscaled$mapArg = list(theta = factor(c(NA, 1)))
-
-model_glmm_unscaled <- glmmTMB:::fitTMB(TMBStruc_unscaled)
-
-summary(model_glmm_unscaled)
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  364213.0  364335.1 -182094.5  364189.0    194809 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 1.767e-03 4.203e-02
-# Number of obs: 194821, groups:  str_ID, 17711; id, 8
-# 
-# Conditional model:
-#                               Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -8.719916   7.538580  -1.157   0.2474    
-# log(sl_)                      0.145907   0.007935  18.388  < 2e-16 ***
-# cos(ta_)                      0.005925   0.012773   0.464   0.6427    
-# log(major_d)                  0.379797   0.055793   6.807 9.95e-12 ***
-# log(minor_d)                  0.259076   0.062244   4.162 3.15e-05 ***
-# log(local_d)                  0.027645   0.006793   4.070 4.71e-05 ***
-# landuse_factorHuman-modified -0.227838   0.048165  -4.730 2.24e-06 ***
-# landuse_factorDeciduous       0.311899   0.056685   5.502 3.75e-08 ***
-# landuse_factorMixed           0.084171   0.034586   2.434   0.0149 *  
-# landuse_factorOpen/shrub/bog  0.084088   0.040905   2.056   0.0398 *  
-# landuse_factorNew forest      0.418621   0.028681  14.596  < 2e-16 ***
-
-
-
-TMBStruc_unscaled1 <- glmmTMB(
-  case_ ~ log(sl_) + cos(ta_) + 
-    log(minor_d) + log(major_d) + log(local_d) + 
-    landuse_factor +
-    factor(time_category):log(minor_d) + factor(time_category):log(major_d) + factor(time_category):log(local_d) +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3_original,
-  doFit = FALSE
-)
-
-TMBStruc_unscaled1$parameters$theta[1] = log(1e3)  
-TMBStruc_unscaled1$mapArg = list(theta = factor(c(NA, 1)))
-
-model_glmm_unscaled1 <- glmmTMB:::fitTMB(TMBStruc_unscaled1)
-
-summary(model_glmm_unscaled1)
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  364188.9  364372.1 -182076.4  364152.9    194803 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 1.614e-03 4.018e-02
-# Number of obs: 194821, groups:  str_ID, 17711; id, 8
-# 
-# Conditional model:
-#                                             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                                -8.827107   7.539078  -1.171  0.24166    
-# log(sl_)                                    0.147558   0.007945  18.572  < 2e-16 ***
-# cos(ta_)                                    0.006080   0.012775   0.476  0.63410    
-# log(minor_d)                                0.279987   0.097728   2.865  0.00417 ** 
-# log(major_d)                                0.395830   0.088305   4.483 7.38e-06 ***
-# log(local_d)                                0.075505   0.012896   5.855 4.78e-09 ***
-# landuse_factorHuman-modified               -0.230817   0.048274  -4.781 1.74e-06 ***
-# landuse_factorDeciduous                     0.314534   0.056701   5.547 2.90e-08 ***
-# landuse_factorMixed                         0.086503   0.034602   2.500  0.01242 *  
-# landuse_factorOpen/shrub/bog                0.087503   0.040917   2.139  0.03247 *  
-# landuse_factorNew forest                    0.420556   0.028692  14.657  < 2e-16 ***
-# log(minor_d):factor(time_category)Night    -0.026954   0.131876  -0.204  0.83805    
-# log(minor_d):factor(time_category)Twilight -0.050252   0.208371  -0.241  0.80943    
-# log(major_d):factor(time_category)Night     0.023361   0.121961   0.192  0.84810    
-# log(major_d):factor(time_category)Twilight -0.216888   0.150383  -1.442  0.14924    
-# log(local_d):factor(time_category)Night    -0.082118   0.015481  -5.304 1.13e-07 ***
-# log(local_d):factor(time_category)Twilight -0.008528   0.025553  -0.334  0.73858    
-
-
-
-
-
-
-TMBStruc_unscaled2 <- glmmTMB(
-  case_ ~ log(sl_) + cos(ta_) + 
-    log(state_d) + log(local_d) + 
-    landuse_factor +
-    factor(time_category):log(state_d)+ factor(time_category):log(local_d) +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3_original,
-  doFit = FALSE
-)
-
-TMBStruc_unscaled2$parameters$theta[1] = log(1e3)  
-TMBStruc_unscaled2$mapArg = list(theta = factor(c(NA, 1)))
-
-model_glmm_unscaled2 <- glmmTMB:::fitTMB(TMBStruc_unscaled2)
-
-summary(model_glmm_unscaled2)
-
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  364183.9  364336.5 -182076.9  364153.9    194806 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 2.011e-01    0.4485
-# Number of obs: 194821, groups:  str_ID, 17711; id, 8
-# 
-# Conditional model:
-#                                             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                                -6.686061   7.525441  -0.888   0.3743    
-# log(sl_)                                    0.148102   0.007945  18.641  < 2e-16 ***
-# cos(ta_)                                    0.006089   0.012775   0.477   0.6336    
-# log(state_d)                                0.425310   0.072090   5.900 3.64e-09 ***
-# log(local_d)                                0.075346   0.012886   5.847 4.99e-09 ***
-# landuse_factorHuman-modified               -0.232844   0.048198  -4.831 1.36e-06 ***
-# landuse_factorDeciduous                     0.314852   0.056677   5.555 2.77e-08 ***
-# landuse_factorMixed                         0.085999   0.034601   2.485   0.0129 *  
-# landuse_factorOpen/shrub/bog                0.089886   0.040903   2.198   0.0280 *  
-# landuse_factorNew forest                    0.420756   0.028691  14.665  < 2e-16 ***
-# log(state_d):factor(time_category)Night    -0.067921   0.096952  -0.701   0.4836    
-# log(state_d):factor(time_category)Twilight -0.204533   0.131558  -1.555   0.1200    
-# log(local_d):factor(time_category)Night    -0.081835   0.015474  -5.289 1.23e-07 ***
-# log(local_d):factor(time_category)Twilight -0.008628   0.025537  -0.338   0.7355 
-
-# remove 1 nonsignificant predictor
-
-TMBStruc_unscaled2.1 <- glmmTMB(
-  case_ ~ log(sl_) +
-    log(state_d) + log(local_d) + 
-    landuse_factor +
-    factor(time_category):log(state_d)+ factor(time_category):log(local_d) +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3_original,
-  doFit = FALSE
-)
-
-TMBStruc_unscaled2.1$parameters$theta[1] = log(1e3)  
-TMBStruc_unscaled2.1$mapArg = list(theta = factor(c(NA, 1)))
-
-model_glmm_unscaled2.1 <- glmmTMB:::fitTMB(TMBStruc_unscaled2.1)
-
-summary(model_glmm_unscaled2.1)
-
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  364182.1  364324.6 -182077.0  364154.1    194807 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 2.008e-01    0.4481
-# Number of obs: 194821, groups:  str_ID, 17711; id, 8
-# 
-# Conditional model:
-#                                             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                                -6.678994   7.525403  -0.888   0.3748    
-# log(sl_)                                    0.148160   0.007944  18.650  < 2e-16 ***
-# log(state_d)                                0.424478   0.072023   5.894 3.78e-09 ***
-# log(local_d)                                0.075221   0.012879   5.841 5.20e-09 ***
-# landuse_factorHuman-modified               -0.232042   0.048161  -4.818 1.45e-06 ***
-# landuse_factorDeciduous                     0.314903   0.056668   5.557 2.74e-08 ***
-# landuse_factorMixed                         0.086003   0.034595   2.486   0.0129 *  
-# landuse_factorOpen/shrub/bog                0.089969   0.040896   2.200   0.0278 *  
-# landuse_factorNew forest                    0.420815   0.028688  14.669  < 2e-16 ***
-# log(state_d):factor(time_category)Night    -0.068000   0.096868  -0.702   0.4827    
-# log(state_d):factor(time_category)Twilight -0.203967   0.131476  -1.551   0.1208    
-# log(local_d):factor(time_category)Night    -0.081794   0.015470  -5.287 1.24e-07 ***
-# log(local_d):factor(time_category)Twilight -0.008597   0.025529  -0.337   0.7363  
-
-
-
-
-
-
-
-# Visualization
-ggplot(steps3_original %>% filter(case_ == TRUE), 
-       aes(x = time_category, y = major_d)) +
-  geom_boxplot() +
-  labs(title = "Actual distances to major roads by time of day",
-       y = "Distance (m)")
-
-ggplot(steps3_original %>% filter(case_ == TRUE), 
-       aes(x = time_category, y = minor_d)) +
-  geom_boxplot() +
-  labs(title = "Actual distances to minor roads by time of day",
-       y = "Distance (m)")
-
-ggplot(steps3_original %>% filter(case_ == TRUE), 
-       aes(x = time_category, y = local_d)) +
-  geom_boxplot() +
-  labs(title = "Actual distances to local roads by time of day",
-       y = "Distance (m)")
-
-
-ggplot(steps3_original %>% filter(case_ == TRUE), 
-       aes(x = time_category, y = state_d)) +
-  geom_boxplot() +
-  labs(title = "Actual distances to state roads by time of day",
-       y = "Distance (m)")
-
-# Alternative approach using data.frame subsets
-day_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Day"), 
-                  c(major_mean = mean(major_d, na.rm = TRUE),
-                    major_median = median(major_d, na.rm = TRUE),
-                    minor_mean = mean(minor_d, na.rm = TRUE),
-                    local_mean = mean(local_d, na.rm = TRUE),
-                    state_mean = mean(state_d, na.rm = TRUE),
-                    n = length(major_d)))
-
-night_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Night"), 
-                     c(major_mean = mean(major_d, na.rm = TRUE),
-                       major_median = median(major_d, na.rm = TRUE),
-                       minor_mean = mean(minor_d, na.rm = TRUE),
-                       local_mean = mean(local_d, na.rm = TRUE),
-                       state_mean = mean(state_d, na.rm = TRUE),
-                       n = length(major_d)))
-
-twilight_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Twilight"), 
-                        c(major_mean = mean(major_d, na.rm = TRUE),
-                          major_median = median(major_d, na.rm = TRUE),
-                          minor_mean = mean(minor_d, na.rm = TRUE),
-                          local_mean = mean(local_d, na.rm = TRUE),
-                          state_mean = mean(state_d, na.rm = TRUE),
-                          n = length(major_d)))
-
-# Combine results
-rbind(Day = day_summary, Night = night_summary, Twilight = twilight_summary)
 #------------------------------------------------- making road crossing detection -----------------------
 
 steps3$row_id <- 1:nrow(steps3)
@@ -2228,6 +1961,11 @@ summary(model_glmm55.1)
 # crosses_localFALSE:factor(time_category)Twilight -0.328817  22.568371  -0.015   0.9884    
 # crosses_localTRUE:factor(time_category)Twilight  -0.003266  22.568761   0.000   0.9999   
 
+
+
+
+
+
 ```
 
 
@@ -2283,7 +2021,7 @@ ggplot(used_steps, aes(x = ta_ * (180/pi), fill = dist_band)) +
   geom_density(alpha = 0.5) +
   facet_wrap(~ dist_band) +
   labs(x = "Turning angle, degrees", y = "Density",
-       title = "Distribution of Turning Angles by Distance from Road")
+       title = "Distribution of turning Angles by distance from state road")
 
 
 
@@ -2291,8 +2029,7 @@ ggplot(used_steps, aes(x = log(sl_), fill = dist_band)) +
   geom_density(alpha = 0.5) +
   facet_wrap(~ dist_band) +
   labs(x = "Log step length, m", y = "Density",
-       title = "Distribution of step length by distance from road")
-
+       title = "Distribution of step length by distance from state road")
 
 
 
@@ -2509,10 +2246,290 @@ corrplot(het_cor$correlations, method = "color",
 
 
 
+# ---------------- crossings as not significant -----------------------
+used_steps <- steps3[steps3$case_ == TRUE,]
+
+
+crossing_counts_state <- table(
+  Time = used_steps$time_category[used_steps$crosses_state == TRUE],
+  Season = used_steps$season[used_steps$crosses_state == TRUE]
+)
+
+#           Season
+# Time       Winter Summer Spring
+#   Day           3      1      6
+#   Night        16      7      7
+#   Twilight      5      1      3
+
+crossing_counts_local <- table(
+  Time = used_steps$time_category[used_steps$crosses_local == TRUE],
+  Season = used_steps$season[used_steps$crosses_local == TRUE]
+)
+
+#           Season
+# Time       Winter Summer Spring
+#   Day          44    136     81
+#   Night       205     98     82
+#   Twilight     28     55     27   
+
+
+# > sum(crossing_counts_local$Freq[crossing_counts_local$Time == "Day"])
+# [1] 261
+# > sum(crossing_counts_local$Freq[crossing_counts_local$Time == "Night"])
+# [1] 385
+# > sum(crossing_counts_local$Freq[crossing_counts_local$Time == "Twilight"])
+# [1] 110
+# > sum(crossing_counts_state$Freq[crossing_counts_stateTime == "Twilight"])
+# Error: object 'crossing_counts_stateTime' not found
+# > sum(crossing_counts_state$Freq[crossing_counts_state$Time == "Twilight"])
+# [1] 9
+# > sum(crossing_counts_state$Freq[crossing_counts_state$Time == "Night"])
+# [1] 30
+# > sum(crossing_counts_state$Freq[crossing_counts_state$Time == "Day"])
+# [1] 10
+# > sum(crossing_counts_state$Freq[crossing_counts_state$Season == "Winter"])
+# [1] 24
+# > sum(crossing_counts_state$Freq[crossing_counts_state$Season == "Spring"])
+# [1] 16
+# > sum(crossing_counts_state$Freq[crossing_counts_state$Season == "Summer"])
+# [1] 9
+# > sum(crossing_counts_local$Freq[crossing_counts_local$Season == "Summer"])
+# [1] 289
+# > sum(crossing_counts_local$Freq[crossing_counts_local$Season == "Spring"])
+# [1] 190
+# > sum(crossing_counts_local$Freq[crossing_counts_local$Season == "Winter"])
+
+
+```
+
+
+
+
+```{r mean distances descriptive}
+
+
+# ----------------- mean distances to roads per category --------------------
+
+
+ggplot(steps3_original %>% filter(case_ == TRUE), 
+       aes(x = time_category, y = local_d)) +
+  geom_boxplot() +
+  labs(title = "Actual distances to local roads by time of day",
+       y = "Distance (m)")
+
+
+ggplot(steps3_original %>% filter(case_ == TRUE), 
+       aes(x = time_category, y = state_d)) +
+  geom_boxplot() +
+  labs(title = "Actual distances to state roads by time of day",
+       y = "Distance (m)")
+
+# Alternative approach using data.frame subsets
+day_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Day"), 
+                  c(local_mean = mean(local_d, na.rm = TRUE),
+                    state_mean = mean(state_d, na.rm = TRUE),
+                    n = length(major_d)))
+
+night_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Night"), 
+                     c(local_mean = mean(local_d, na.rm = TRUE),
+                       state_mean = mean(state_d, na.rm = TRUE),
+                       n = length(major_d)))
+
+twilight_summary <- with(subset(steps3_original, case_ == TRUE & time_category == "Twilight"), 
+                        c(local_mean = mean(local_d, na.rm = TRUE),
+                          state_mean = mean(state_d, na.rm = TRUE),
+                          n = length(major_d)))
+
+# Combine results
+daytime_summary <- rbind(Day = day_summary, Night = night_summary, Twilight = twilight_summary)
+
+
+# Alternative approach using data.frame subsets
+winter_summary <- with(subset(steps3_original, case_ == TRUE & season == "Winter"), 
+                  c(local_mean = mean(local_d, na.rm = TRUE),
+                    state_mean = mean(state_d, na.rm = TRUE),
+                    n = length(major_d)))
+
+spring_summary <- with(subset(steps3_original, case_ == TRUE & season == "Spring"), 
+                     c(local_mean = mean(local_d, na.rm = TRUE),
+                       state_mean = mean(state_d, na.rm = TRUE),
+                       n = length(major_d)))
+
+summer_summary <- with(subset(steps3_original, case_ == TRUE & season == "Summer"), 
+                        c(local_mean = mean(local_d, na.rm = TRUE),
+                          state_mean = mean(state_d, na.rm = TRUE),
+                          n = length(major_d)))
+
+# Combine results
+season_summary <- rbind(Winter = winter_summary, Spring = spring_summary, Summer = summer_summary)
+
+
+# adding standard error and plotting
+
+# We need to calculate standard errors from your original data
+# For each time category (Day, Night, Twilight)
+time_data <- list()
+
+# Let's calculate means and standard errors for each time category
+for (time in c("Day", "Night", "Twilight")) {
+  # Subset data
+  subset_data <- steps3_original[steps3_original$case_ == TRUE & 
+                                steps3_original$time_category == time, ]
+  
+  # Calculate local road statistics
+  local_mean <- mean(subset_data$local_d, na.rm = TRUE)
+  local_sd <- sd(subset_data$local_d, na.rm = TRUE)
+  local_n <- sum(!is.na(subset_data$local_d))
+  local_se <- local_sd / sqrt(local_n)
+  
+  # Calculate state road statistics
+  state_mean <- mean(subset_data$state_d, na.rm = TRUE)
+  state_sd <- sd(subset_data$state_d, na.rm = TRUE)
+  state_n <- sum(!is.na(subset_data$state_d))
+  state_se <- state_sd / sqrt(state_n)
+  
+  time_data[[time]] <- data.frame(
+    time_category = time,
+    local_mean = local_mean,
+    local_se = local_se,
+    state_mean = state_mean, 
+    state_se = state_se,
+    n = local_n
+  )
+}
+
+# Combine results
+time_df <- do.call(rbind, time_data)
+
+# Reshape for plotting
+time_long <- reshape(time_df,
+                   direction = "long",
+                   varying = list(c("local_mean", "state_mean"), c("local_se", "state_se")),
+                   v.names = c("mean", "se"),
+                   timevar = "road_type",
+                   times = c("Local roads", "State roads"))
+
+# Plot with error bars
+ggplot(time_long, aes(x = time_category, y = mean, 
+                    group = road_type, color = road_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+               width = 0.2, position = position_dodge(0.1)) +
+  scale_y_continuous(name = "Distance (m)", limits = c(0, 2500)) +
+  scale_color_manual(values = c("Local roads" = "#1b9e77", "State roads" = "#7570b3"),
+                    name = "Road type") +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    axis.title.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 12)
+  ) +
+  labs(title = "Average distance to road types by time of day")
+
+# Similarly for season plot
+season_data <- list()
+
+for (seas in c("Winter", "Spring", "Summer")) {
+  # Subset data
+  subset_data <- steps3_original[steps3_original$case_ == TRUE & 
+                                steps3_original$season == seas, ]
+  
+  # Calculate local road statistics
+  local_mean <- mean(subset_data$local_d, na.rm = TRUE)
+  local_sd <- sd(subset_data$local_d, na.rm = TRUE)
+  local_n <- sum(!is.na(subset_data$local_d))
+  local_se <- local_sd / sqrt(local_n)
+  
+  # Calculate state road statistics
+  state_mean <- mean(subset_data$state_d, na.rm = TRUE)
+  state_sd <- sd(subset_data$state_d, na.rm = TRUE)
+  state_n <- sum(!is.na(subset_data$state_d))
+  state_se <- state_sd / sqrt(state_n)
+  
+  season_data[[seas]] <- data.frame(
+    season = seas,
+    local_mean = local_mean,
+    local_se = local_se,
+    state_mean = state_mean, 
+    state_se = state_se,
+    n = local_n
+  )
+}
+
+# Combine results
+season_df <- do.call(rbind, season_data)
+
+# Reshape for plotting
+season_long <- reshape(season_df,
+                     direction = "long",
+                     varying = list(c("local_mean", "state_mean"), c("local_se", "state_se")),
+                     v.names = c("mean", "se"),
+                     timevar = "road_type",
+                     times = c("Local roads", "State roads"))
+
+# Plot with error bars
+ggplot(season_long, aes(x = season, y = mean, 
+                       group = road_type, color = road_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+               width = 0.2, position = position_dodge(0.1)) +
+  scale_y_continuous(name = "Distance (m)", limits = c(0, 2500)) +
+  scale_color_manual(values = c("Local roads" = "#1b9e77", "State roads" = "#7570b3"),
+                    name = "Road type") +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    axis.title.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 12)
+  ) +
+  labs(title = "Average distance to road types by season")
+
+# joined 
+time_long$category_type <- "Time of day"
+season_long$category_type <- "Season"
+
+# rename to be consistent
+names(time_long)[names(time_long) == "time_category"] <- "category"
+names(season_long)[names(season_long) == "season"] <- "category"
+
+#combine
+all_data <- rbind(time_long, season_long)
+
+#single plot for tidy output
+ggplot(all_data, aes(x = category, y = mean, 
+                    group = road_type, color = road_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), 
+               width = 0.2, position = position_dodge(0.1)) +
+  facet_wrap(~ category_type, scales = "free_x") +
+  scale_y_continuous(name = "Distance, m", limits = c(0, 2500)) +
+  scale_color_manual(values = c("#C4A484", "#E6550D"),
+    labels = c("Local road", "State road")) +
+  labs(title = "Average distance to road types",
+       color = "") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 12, family = "Times"),
+    plot.title=element_text( hjust=0.5, vjust=0.5),
+    strip.text = element_text(size = 12, face = "bold")
+  )
 
 
 
 ```
+
+
+
+
+
 
 ```{r log ratio plot }
 
@@ -2520,13 +2537,14 @@ corrplot(het_cor$correlations, method = "color",
 
 # prepare data with used/available points and distance bands
 points_data <- steps3_original %>%
-  select(time_category, state_d, case_) %>%
+  dplyr::select(time_category, state_d, case_) %>%
   mutate(point_type = ifelse(case_ == TRUE, "Used", "Available"))
 
 # create distance bands from roads
 points_data$dist_band <- cut(points_data$state_d, 
-                             breaks = c(-Inf, 100, 200, 300, 500, 1000, 1500, Inf),
-                             labels = c("<100m", "100-200m","200-300m", "300-500m", "500-1000m", "1000-1500m", ">1500m"))
+                             breaks = c(-Inf, 100, 300, 500, 1000, 1500, Inf),
+                             labels = c("<100m", "100-300m", "300-500m", "500-1000m", "1000-1500m", ">1500m"))
+
 
 # count observations in each group and calculate percentages
 count_df <- as.data.frame(table(
@@ -2537,25 +2555,6 @@ count_df <- as.data.frame(table(
 names(count_df) <- c("time_category", "point_type", "dist_band", "count")
 
 
-# > count_df
-#    time_category point_type  dist_band count
-# 1            Day  Available       <60m   450
-# 2          Night  Available       <60m   733
-# 3       Twilight  Available       <60m   134
-# 4            Day       Used       <60m     7
-# 5          Night       Used       <60m    47
-# 6       Twilight       Used       <60m     2
-
-
-#    time_category point_type  dist_band count
-# 1            Day  Available      <100m   824
-# 2          Night  Available      <100m  1179
-# 3       Twilight  Available      <100m   253
-# 4            Day       Used      <100m    36
-# 5          Night       Used      <100m    79
-# 6       Twilight       Used      <100m    15
-
-
 # add sample sizes to data for text annotation
 used_counts <- subset(count_df, point_type == "Used")
 names(used_counts)[4] <- "sample_size"
@@ -2564,7 +2563,7 @@ names(used_counts)[4] <- "sample_size"
 props_df <- count_df %>%
   group_by(time_category, point_type) %>%
   mutate(prop = count/sum(count)) %>%
-  select(-count) %>%
+  dplyr::select(-count) %>%
   pivot_wider(names_from = point_type, values_from = prop)
 
 # calculate selection ratio and simple approximate CIs
@@ -2594,6 +2593,8 @@ ratio_df <- merge(ratio_df,
                  used_counts[, c("time_category", "dist_band", "sample_size")],
                  by = c("time_category", "dist_band"))
 
+# windowsFonts(Times=windowsFont("TT Times New Roman"))
+
 # create the plot
 ggplot(ratio_df, aes(x = dist_band, y = selection_strength, fill = time_category)) +
   geom_col(position = position_dodge(width = 0.9), alpha = 0.7) +
@@ -2601,53 +2602,244 @@ ggplot(ratio_df, aes(x = dist_band, y = selection_strength, fill = time_category
                 position = position_dodge(width = 0.9),
                 width = 0.2) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(title = "Road Distance Selection Strength by Time of Day",
-       subtitle = "Values above 0 indicate selection, below 0 indicate avoidance",
-       x = "Distance from State Roads", 
-       y = "Log Ratio (Used:Available)",
-       caption = "Error bars show approximate 95% confidence intervals") +
+  scale_fill_manual(
+    values = c("#FFC145", "#2B3A67", "#B8B8D1"),
+    labels = c("Day", "Night", "Twilight")
+  ) +
+  labs(title = "Road distance selection strength by time of day",
+       x = "Distance from state roads", 
+       y = "Log ratio (used:available)",
+       fill = "Time category") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title=element_text( hjust=0.5, vjust=0.5),
+        text = element_text(family = "Times")) +
+  ylim(-1.2, 0.5)
+
+
+# --------- log odds of crossings -----------
 
 
 
-# plot scale issue fixed
-# Modify your plot to limit the y-axis and add inset for full scale
-ggplot(ratio_df, aes(x = dist_band, y = selection_strength, fill = time_category)) +
-  geom_col(position = position_dodge(width = 0.9), alpha = 0.7) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), 
-                position = position_dodge(width = 0.9),
-                width = 0.2) +
+# 1. Create a function to calculate crossing ratios with confidence intervals
+calculate_crossing_ratio <- function(data, road_type = "state") {
+  # Determine which crossing variable to use
+  crossing_var <- paste0("crosses_", road_type)
+  
+  # Count observed crossings (actual moose steps)
+  observed <- data[data$case_ == TRUE, ]
+  total_observed <- nrow(observed)
+  observed_crossings <- sum(observed[[crossing_var]])
+  observed_prop <- observed_crossings / total_observed
+  
+  # Count expected crossings (random steps)
+  expected <- data[data$case_ == FALSE, ]
+  total_expected <- nrow(expected)
+  expected_crossings <- sum(expected[[crossing_var]])
+  expected_prop <- expected_crossings / total_expected
+  
+  # Calculate ratio (accounting for 10:1 sampling of random:observed steps)
+  ratio <- observed_prop / expected_prop
+  
+  # Calculate standard error and 95% CI for the ratio using delta method
+  # For proportions: SE = sqrt(p*(1-p)/n)
+  se_obs <- sqrt(observed_prop * (1 - observed_prop) / total_observed)
+  se_exp <- sqrt(expected_prop * (1 - expected_prop) / total_expected)
+  
+  # For ratio: using approximation based on propagation of error
+  # SE_ratio ≈ ratio * sqrt((SE_obs/obs_prop)^2 + (SE_exp/exp_prop)^2)
+  se_ratio <- ratio * sqrt((se_obs/observed_prop)^2 + (se_exp/expected_prop)^2)
+  
+  # 95% confidence interval for the ratio
+  ci_lower <- ratio - 1.96 * se_ratio
+  ci_upper <- ratio + 1.96 * se_ratio
+  
+  # Return results
+  result <- data.frame(
+    road_type = road_type,
+    observed_crossings = observed_crossings,
+    expected_crossings = expected_crossings,
+    observed_prop = observed_prop,
+    expected_prop = expected_prop,
+    ratio = ratio,
+    ci_lower = ci_lower,
+    ci_upper = ci_upper,
+    p_value = 2 * pnorm(-abs((ratio - 1)/se_ratio)) # Two-tailed test
+  )
+  
+  return(result)
+}
+
+# 2. Apply to different road types
+state_ratio <- calculate_crossing_ratio(steps3, "state")
+local_ratio <- calculate_crossing_ratio(steps3, "local")
+
+# 3. Combine results
+crossing_ratios <- rbind(state_ratio, local_ratio)
+
+# Function to calculate crossing ratios by category
+calculate_crossing_ratio_by_category <- function(data, road_type = "state", category_var = "time_category") {
+  # Determine which crossing variable to use
+  crossing_var <- paste0("crosses_", road_type)
+  
+  # Get all category levels
+  categories <- unique(data[[category_var]])
+  results <- data.frame()
+  
+  for (cat in categories) {
+    # Subset data for this category
+    cat_data <- data[data[[category_var]] == cat, ]
+    
+    # Observed crossings
+    observed <- cat_data[cat_data$case_ == TRUE, ]
+    total_observed <- nrow(observed)
+    if (total_observed == 0) next
+    observed_crossings <- sum(observed[[crossing_var]])
+    observed_prop <- observed_crossings / total_observed
+    
+    # Expected crossings
+    expected <- cat_data[cat_data$case_ == FALSE, ]
+    total_expected <- nrow(expected)
+    expected_crossings <- sum(expected[[crossing_var]])
+    expected_prop <- expected_crossings / total_expected
+    
+    # Calculate ratio
+    ratio <- observed_prop / expected_prop
+    
+    # Calculate SE and CI
+    se_obs <- sqrt(observed_prop * (1 - observed_prop) / total_observed)
+    se_exp <- sqrt(expected_prop * (1 - expected_prop) / total_expected)
+    se_ratio <- ifelse(
+      observed_prop == 0 || expected_prop == 0, 
+      NA, 
+      ratio * sqrt((se_obs/observed_prop)^2 + (se_exp/expected_prop)^2)
+    )
+    
+    ci_lower <- ratio - 1.96 * se_ratio
+    ci_upper <- ratio + 1.96 * se_ratio
+    
+    # Store results
+    cat_result <- data.frame(
+      road_type = road_type,
+      category = cat,
+      category_var = category_var,
+      observed_crossings = observed_crossings,
+      expected_crossings = expected_crossings,
+      total_observed = total_observed,
+      total_expected = total_expected,
+      observed_prop = observed_prop,
+      expected_prop = expected_prop,
+      ratio = ratio,
+      ci_lower = ci_lower,
+      ci_upper = ci_upper
+    )
+    
+    results <- rbind(results, cat_result)
+  }
+  
+  return(results)
+}
+
+# Calculate crossing ratios by time of day for each road type
+time_state_ratios <- calculate_crossing_ratio_by_category(steps3, "state", "time_category")
+time_local_ratios <- calculate_crossing_ratio_by_category(steps3, "local", "time_category")
+
+# Calculate crossing ratios by season for each road type
+season_state_ratios <- calculate_crossing_ratio_by_category(steps3, "state", "season")
+season_local_ratios <- calculate_crossing_ratio_by_category(steps3, "local", "season")
+
+# 1. Basic crossing ratio plot for road types
+ggplot(crossing_ratios, aes(x = road_type, y = log(ratio), fill = road_type)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_errorbar(aes(ymin = log(ci_lower), ymax = log(ci_upper)), width = 0.2) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(title = "Road Distance Selection Strength by Time of Day",
-       subtitle = "Values above 0 indicate selection, below 0 indicate avoidance",
-       x = "Distance from State Roads", 
-       y = "Log Ratio (Used:Available)",
-       caption = "Error bars show approximate 95% confidence intervals") +
+  labs(x = "Season", y = "Log Ratio (Used:Available)",
+       title = "Road crossing avoidance by season",
+       fill = "") +
+  scale_fill_manual(
+    values = c("#C4A484", "#C14608"),
+    labels = c("Local", "State")
+  ) +
+    theme_minimal() +
+  theme(plot.title=element_text( hjust=0.5, vjust=0.5),
+        text = element_text(family = "Times"))
+
+# 2. Crossing ratio by time of day
+time_combined <- rbind(
+  time_state_ratios %>% mutate(road_group = "State Roads"),
+  time_local_ratios %>% mutate(road_group = "Local Roads")
+)
+
+ggplot(time_combined, aes(x = category, y = log(ratio), fill = road_group)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = log(ci_lower), ymax = log(ci_upper)), 
+                position = position_dodge(width = 0.7), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Season", y = "Log Ratio (Used:Available)",
+       title = "Road crossing avoidance by season",
+       fill = "") +
+  scale_fill_manual(
+    values = c("#C4A484", "#E6550D"),
+    labels = c("Local", "State")
+  ) +
+    theme_minimal() +
+  theme(plot.title=element_text( hjust=0.5, vjust=0.5),
+        text = element_text(family = "Times"))
+
+
+# 3. Crossing ratio by season
+season_combined <- rbind(
+  season_state_ratios %>% mutate(road_group = "State Roads"),
+  season_local_ratios %>% mutate(road_group = "Local Roads")
+)
+
+ggplot(season_combined, aes(x = category, y = log(ratio), fill = road_group)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = log(ci_lower), ymax = log(ci_upper)), 
+                position = position_dodge(width = 0.7), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Season", y = "Log ratio (used:available)",
+       title = "Road crossing avoidance by season",
+       fill = "") +
+  scale_fill_manual(
+    values = c("#C4A484", "#E6550D"),
+    labels = c("Local", "State")
+  ) +
+    theme_minimal() +
+  theme(plot.title=element_text( hjust=0.5, vjust=0.5),
+        text = element_text(family = "Times"))
+
+
+# First, let's combine the data frames
+# Add a category_type column to distinguish between time and season data
+time_combined$category_type <- "Time of day"
+season_combined$category_type <- "Season"
+
+# Combine the data frames
+all_crossing_data <- rbind(time_combined, season_combined)
+
+# Create a faceted plot
+ggplot(all_crossing_data, aes(x = category, y = log(ratio), fill = road_group)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = log(ci_lower), ymax = log(ci_upper)), 
+                position = position_dodge(width = 0.7), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  facet_wrap(~ category_type, scales = "free_x") +
+  labs(x = "", y = "Log ratio (used:available)",
+       title = "Road crossing avoidance by time of day and season",
+       fill = "") +
+  scale_fill_manual(
+    values = c("#C4A484", "#E6550D"),
+    labels = c("Local road", "State road")
+  ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  # Set limits to see detail in the important range
-  coord_cartesian(ylim = c(-1.2, 0.5)) +
-  # Add text annotation about truncated values
-  annotate("text", x = 1, y = -0.9, 
-           label = "Note: Values for 0-50m are truncated\nDay: -1.9, Night: -0.8, Twilight: -1.9",
-           hjust = 0, size = 3)
-
-
-# Line chart version
-ggplot(ratio_df, aes(x = dist_band, y = selection_strength, 
-                    color = time_category, group = time_category)) +
-  geom_line(size = 1) +
-  geom_point(size = 3) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(title = "Road Distance Selection Strength by Time of Day",
-       subtitle = "Values above 0 indicate selection, below 0 indicate avoidance",
-       x = "Distance from State Roads", 
-       y = "Log Ratio (Used:Available)",
-       caption = "Error bars show approximate 95% confidence intervals") +
-  theme_minimal()
-
+  theme(
+    plot.title = element_text(hjust = 0.5, vjust = 0.5),
+    text = element_text(family = "Times"),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(size = 12, face = "bold")
+  )
 
 
 
