@@ -27,30 +27,48 @@ time$interpolated_time <- time$start_h +
 
 time$d_start <- as.Date(time$d_start, format = "%Y/%m/%d")
 
-sunlight <- getSunlightTimes(date = final$d_start, lon = 25.45, lat = 59.05, 
-                             keep = c("sunriseEnd", "sunset", "night", "nightEnd"),
-                             tz = "Europe/Tallinn" )
+
+
+sunlight <- getSunlightTimes(
+  date = steps2$date,
+  lon = 25.45, 
+  lat = 59.05, 
+  keep = c("sunrise", "sunset", "dawn", "dusk"),
+  tz = "Europe/Tallinn"
+)
 
 
 final <- left_join(time, sunlight, join_by("d_start" == "date") , relationship = "many-to-many", multiple = "first")
 
-final$sunriseEnd <- chron(times= (format(final$sunriseEnd, format = "%H:%M:%S")))
-final$nightEnd <- chron(times= (format(final$nightEnd, format = "%H:%M:%S")))
-final$night <- chron(times= (format(final$night, format = "%H:%M:%S")))
-final$sunset <- chron(times= (format(final$sunset, format = "%H:%M:%S")))
-
 
 final <- final %>%
   mutate(
+    sunrise = chron(times = format(sunrise, format = "%H:%M:%S")),
+    sunset = chron(times = format(sunset, format = "%H:%M:%S")),
+    dawn = chron(times = format(dawn, format = "%H:%M:%S")),
+    dusk = chron(times = format(dusk, format = "%H:%M:%S")),
+
     time_category = case_when(
-      interpolated_time >= sunriseEnd & interpolated_time < sunset  ~ "Day",
-      interpolated_time >= night | interpolated_time < nightEnd  ~ "Night",
-      .default = "Twilight"
-      ),
+      interpolated_time >= sunrise & interpolated_time < sunset ~ "Day", # day
+      (interpolated_time >= dawn & interpolated_time < sunrise) |
+        (interpolated_time >= sunset & interpolated_time < dusk) ~ "Twilight", # twilight
+      TRUE ~ "Night"),
     crossing_time = lubridate::hms(interpolated_time),
     month = lubridate::month(d_start, label = TRUE)
   )
 
+# > crossing_counts_state
+# Season
+# Time       Spring Summer Winter
+# Day           5      1      4
+# Night        10      8     21
+# Twilight      4      2      4
+# > crossing_counts_local
+# Season
+# Time       Spring Summer Winter
+# Day         117    215     59
+# Night       143    133    341
+# Twilight     44     77     46
 
 # -------------------------------------------------------------------------------- make summary for thesis -------------------------------
 summary_final <- final %>% 
@@ -60,14 +78,15 @@ summary_final <- final %>%
       .default = "Local"
     )
   ) %>% 
-  dplyr::select(fid, class_glmm, time_category, month)
+  dplyr::select(fid, class_glmm, time_category, month, interpolated_time) %>% 
+  filter(!(month == "sept"))
 
 
 # Assign seasons (with November in Winter)
 summary_final$season <- case_when(
   summary_final$month %in% c("Nov", "Dec", "Jan", "Feb", "Mar") ~ "Winter",
   summary_final$month %in% c("Apr", "May") ~ "Spring",
-  summary_final$month %in% c("Jun", "Jul", "Aug", "Sep", "Oct") ~ "Summer"
+  summary_final$month %in% c("Jun", "Jul", "Aug") ~ "Summer"
 )
 
 # Create tables in one step
@@ -80,6 +99,16 @@ crossing_counts_local <- table(
   Time = summary_final$time_category[summary_final$class_glmm == "Local"],
   Season = summary_final$season[summary_final$class_glmm == "Local"]
 )
+
+ggplot(summary_final, aes(x=month, y=as.POSIXct(as.character(interpolated_time), format = "%H:%M:%S"), color=time_category)) +
+  geom_point(size=3, alpha=0.7) +
+  scale_color_manual(values=c("Day"="yellow", "Night"="darkblue", "Twilight"="purple")) +
+  labs(title="Crossing Observations by Time and Month",
+       y="Time of Day", 
+       x="Month",
+       color="Time Category") +
+  theme_minimal() +
+  scale_y_datetime(date_labels="%H:%M", date_breaks="2 hour")
 
 # ------------------------------------------------------------ visualise the crossings -----------------------------------
 
@@ -137,12 +166,76 @@ head(tracks)
 # inspect the data completeness...
 tracks %>%
   mutate(month = lubridate::month(start, label = TRUE)) %>%
-  count(month) %>%
-  arrange(n) %>% 
-  filter(month == "nov") %>%
-  summarise(num_days = n_distinct(as.Date(start)))
+  count(month) %>% 
+  arrange(n)
+  # filter(month == "Nov") %>%
+  # summarise(num_days = n_distinct(as.Date(start)))
 
   
+
+# -------------------------------------------------Filter for just August data at hour 20---------
+august_hour20 <- tracks_filtered %>%
+  filter(month == "Aug", hour == 20)
+
+august_hour20_by_day <- august_hour20 %>%
+  mutate(day_string = substr(start, 9, 10)) %>% # Extract just the day part manually
+  group_by(day_string) %>%
+  summarize(
+    count = n(),
+    avg_speed = mean(speed_kph),
+    max_speed = max(speed_kph)
+  ) %>%
+  arrange(count)
+
+august_hour20_by_day
+
+# Identify the days with unusually high speeds
+high_speed_threshold <- quantile(august_hour20$speed_kph, 0.9) # Top 10% speeds
+print(paste0("High speed threshold: ", high_speed_threshold, " km/h"))
+
+# Plot the daily maximum speeds in August at hour 20
+ggplot(august_hour20_by_day, aes(x = day_string, y = avg_speed)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_hline(yintercept = high_speed_threshold, linetype = "dashed", color = "red") +
+  labs(title = "Maximum Moose Speed by Day in August at 20:00",
+       x = "Day of Month", 
+       y = "Maximum Speed (km/h)") +
+  theme_minimal()
+
+
+
+
+# -------------------------------------------------Filter for just november data at hour 16---------
+nov16<- tracks_filtered %>%
+  filter(month == "Nov", hour == 16 | )
+
+nov <- nov16 %>%
+  mutate(day_string = substr(start, 9, 10)) %>% # Extract just the day part manually
+  group_by(day_string) %>%
+  summarize(
+    count = n(),
+    avg_speed = mean(speed_kph),
+    max_speed = max(speed_kph)
+  ) %>%
+  arrange(desc(max_speed))
+
+nov
+
+# Identify the days with unusually high speeds
+high_speed_threshold <- quantile(nov16$speed_kph, 0.9) # Top 10% speeds
+print(paste0("High speed threshold: ", high_speed_threshold, " km/h"))
+
+# Plot the daily maximum speeds in August at hour 20
+ggplot(nov, aes(x = day_string, y = max_speed)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_hline(yintercept = high_speed_threshold, linetype = "dashed", color = "red") +
+  labs(title = "Moose Speed by Day in Nov at 16:00",
+       x = "Day of Month", 
+       y = "Speed (km/h)") +
+  theme_minimal()
+
+
+
 
 # filter data based on the inspection...
 
@@ -152,7 +245,7 @@ tracks_filtered <- tracks %>%
     month = factor(lubridate::month(start, label = TRUE)),
     hour = lubridate::hour(start)
   ) %>%
-  filter(!(month == "sept"))
+  filter(!(month == "Sep"))
 
 heatmap_data <- tracks_filtered %>%
   group_by(month, hour) %>%
@@ -163,14 +256,17 @@ heatmap_data <- tracks_filtered %>%
   ) 
 
 heatmap_data %>%
-  mutate(month = factor(month, levels = c("nov", "dec", "janv", "febr", "marts", "apr", "maijs", "jūn", "jūl", "aug", "sept"))) %>% 
-  ggplot(aes(x = month, y = hour, fill = avg_speed_kph)) +
+  mutate(
+    month = factor(
+      month, 
+      levels = c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"))) %>% 
+ggplot(aes(x = month, y = hour, fill = avg_speed_kph)) +
   geom_tile() +
   coord_fixed(ratio = 0.4)+
   scale_fill_viridis_c() +
   labs(x = "Month", y = "Hour of day", fill = "Moose speed 
        (kmh)") +
-  scale_x_discrete(labels= c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept")) +
+  scale_x_discrete(labels = c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep")) +
   theme_minimal()
 
 #------------------------------------------------- plotting for cutoff point -------------------------
@@ -231,7 +327,7 @@ traffic <- traffic %>%
     month = factor(month(ts, label = TRUE, abbr = TRUE)),
     hour = hour(ts)
   ) %>%
-  filter(!(month %in% c("sept", "okt"))) %>%                # Exclude September and October
+  filter(!(month %in% c("Sep", "Oct"))) %>%                # Exclude September and October
   group_by(month, hour, siteno) %>%
   summarise(
     avg_total = mean(total, na.rm = TRUE),                # Average traffic per station
@@ -247,7 +343,7 @@ traffic_aadt <- traffic %>%
   mutate(
     month = factor(
       month, 
-      levels = c("nov", "dec", "janv", "febr", "marts", "apr", "maijs", "jūn", "jūl", "aug", "sept")))
+      levels = c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep")))
 
 coul <- brewer.pal(9, "BuPu")
 
@@ -294,35 +390,80 @@ plot(daily_speeds$date, daily_speeds$speed_kph, type="l",
 lines(daily_speeds$date, daily_speeds$ma7, col="blue", lwd=2)
 
 
+winter_to_spring <- as.Date("2019-04-01")  # Winter to Spring
+spring_to_summer <- as.Date("2019-06-01") 
+
+
 
 # Create the plot
 ggplot(daily_speeds, aes(x=date)) +
-  # Add a subtle background grid
   theme_minimal() +
-  
-  # Add the daily speed line
   geom_line(aes(y=speed_kph, color="Daily Speed"), alpha=0.6) +
-  
-  # Add the 7-day moving average
   geom_line(aes(y=ma7, color="7-day Moving Average"), size=1.2) +
-  
-  # Customize the colors
+  geom_vline(xintercept = as.numeric(as.Date("2019-04-01")), 
+             linetype = "dashed", color = "darkgreen", alpha = 0.7) +
+  geom_vline(xintercept = as.numeric(as.Date("2019-07-01")), 
+             linetype = "dashed", color = "orange", alpha = 0.7) +
   scale_color_manual(name="", 
                      values=c("Daily Speed"="gray40", 
                               "7-day Moving Average"="blue")) +
   
-  # Customize the x-axis to show months properly
   scale_x_date(date_breaks="1 month", date_labels="%b") +
-  
-  # Add labels and title
   labs(title="Daily Movement Speed with 7-day Moving Average",
        x="Month",
        y="Speed (kph)") +
-  
-  # Adjust theme elements for better readability
   theme(
     axis.text.x = element_text(angle=0, hjust=0.5, size=10),
     legend.position = "top",
     panel.grid.minor = element_blank(),
     plot.title = element_text(hjust=0.5, size=14)
+  )
+
+
+# ---------------------------------------------- moose movement speed individual ---------------
+
+tracks_filtered$month <- month(tracks_filtered$date, label = TRUE, abbr = TRUE)
+
+# Order months correctly from November to August
+month_order <- c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug")
+tracks_filtered$month <- factor(tracks_filtered$month, levels = month_order)
+
+# Calculate daily average speeds for each moose
+daily_speeds_by_moose <- tracks_filtered %>%
+  group_by(moose_id, date) %>%
+  summarize(
+    speed_kph = mean(speed_kph, na.rm = TRUE),
+    month = first(month),
+    .groups = 'drop'
+  ) %>%
+  arrange(moose_id, date)
+
+# Calculate 7-day moving average for each moose
+daily_speeds_by_moose <- daily_speeds_by_moose %>%
+  group_by(moose_id) %>%
+  mutate(ma7 = rollmean(speed_kph, 7, fill = NA, align = "center")) %>%
+  ungroup()
+
+# Visualization with individual panels for each moose
+ggplot(daily_speeds_by_moose, aes(x = date, y = speed_kph, group = moose_id)) +
+  geom_line(alpha = 0.6, color = "gray40") +
+  geom_line(aes(y = ma7), color = "blue", size = 1.2) +
+  facet_wrap(~ moose_id, scales = "free_y") +
+  scale_x_date(
+    date_breaks = "1 month",
+    date_labels = "%b",
+    expand = c(0.02, 0.02)
+  ) +
+  labs(
+    title = "Movement speed for each moose",
+    x = "Month",
+    y = "Speed, km/h"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )

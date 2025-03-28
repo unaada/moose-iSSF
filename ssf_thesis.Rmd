@@ -134,6 +134,8 @@ roads <- st_read("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\full
 
 corine <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\rasters\\corine_30m_resample_mode.tif")
 
+slope <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\rasters\\slope_30m_degrees.tif")
+
 #### 1. landuse
 # reclassify matrix to group landuse categories
 m <- matrix(c(0,22,1,
@@ -228,7 +230,12 @@ print(data.frame(
   After = freq_after$count
 ))
 
-#### 4. time 
+#### 4. slope
+
+slope <- slope %>%
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("slope")
 
 
 
@@ -268,7 +275,8 @@ steps2 <- steps %>%
   extract_covariates(landuse_total) %>% 
   extract_covariates(major_roads_dist) %>%
   extract_covariates(minor_roads_dist) %>%
-  extract_covariates(local_roads_dist)
+  extract_covariates(local_roads_dist) %>% 
+  extract_covariates(slope)
 
 
 #  time categories
@@ -359,13 +367,33 @@ steps3$minor_d <- scale(steps3$minor_d)
 steps3$major_d <- scale(steps3$major_d)
 steps3$local_d <- scale(steps3$local_d)
 steps3$state_d <- scale(steps3$state_d)
-
+steps3$slope <- scale(steps3$slope)
 
 ```
 
 
 
 ```{r base movement model}
+
+TMBStruc0 <- glmmTMB(
+  case_ ~ log_sl_ + cos_ta_ + 
+    state_d + local_d + 
+    landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc1.1$parameters$theta[1] = log(1e3)  
+TMBStruc1.1$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm1.1 <- glmmTMB:::fitTMB(TMBStruc1.1)
+summary(model_glmm1.1)
+
+
+
+# --- trying to add slope
 
 
 #----------------------------------------------------- glmm ----------------------------------------------------
@@ -1239,6 +1267,145 @@ summary(model_glmm3.0.1)
 
 
 
+TMBStruc_t <- glmmTMB(
+  case_ ~ log(sl_) + cos(ta_) + 
+    log(state_d + 0.01) + sqrt(local_d) +
+    log(slope) + landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3_original,
+  doFit = FALSE
+)
+
+TMBStruc_t$parameters$theta[1] = log(1e3)  
+TMBStruc_t$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm_t <- glmmTMB:::fitTMB(TMBStruc_t)
+summary(model_glmm_t)
+
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404752.0  404875.4 -202364.0  404728.0    216424 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev.
+#  str_ID (Intercept) 1.000e+06 1000.000
+#  id     (Intercept) 2.016e-01    0.449
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -6.449100   7.140473  -0.903    0.366    
+# log(sl_)                      0.123608   0.007317  16.894  < 2e-16 ***
+# cos(ta_)                      0.012554   0.011876   1.057    0.290    
+# log(state_d + 0.01)           0.358423   0.043852   8.174 2.99e-16 ***
+# sqrt(local_d)                 0.013242   0.002619   5.055 4.29e-07 ***
+# log(slope)                   -0.008590   0.008792  -0.977    0.329    
+# landuse_factorHuman-modified -0.254108   0.046587  -5.454 4.91e-08 ***
+# landuse_factorDeciduous       0.245474   0.053507   4.588 4.48e-06 ***
+# landuse_factorMixed           0.045045   0.032915   1.369    0.171    
+# landuse_factorOpen/shrub/bog  0.043019   0.038982   1.104    0.270    
+# landuse_factorNew forest      0.370055   0.027470  13.471  < 2e-16 ***
+
+# time of day
+
+
+TMBStruc_t2 <- glmmTMB(
+  case_ ~ log(sl_) + cos(ta_) + 
+    log(state_d + 0.01) + sqrt(local_d) +
+    log(slope) + landuse_factor +
+    log(state_d + 0.01):time_category + sqrt(local_d):time_category +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3_original,
+  doFit = FALSE
+)
+
+TMBStruc_t2$parameters$theta[1] = log(1e3)  
+TMBStruc_t2$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm_t2 <- glmmTMB:::fitTMB(TMBStruc_t2)
+summary(model_glmm_t2)
+
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404716.9  404881.5 -202342.4  404684.9    216420 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 2.053e-01    0.4531
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                            Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                               -6.503251   7.140649  -0.911    0.362    
+# log(sl_)                                   0.124934   0.007324  17.058  < 2e-16 ***
+# cos(ta_)                                   0.012373   0.011880   1.041    0.298    
+# log(state_d + 0.01)                        0.391372   0.069054   5.668 1.45e-08 ***
+# sqrt(local_d)                              0.028083   0.003889   7.222 5.13e-13 ***
+# log(slope)                                -0.008828   0.008799  -1.003    0.316    
+# landuse_factorHuman-modified              -0.269145   0.046760  -5.756 8.62e-09 ***
+# landuse_factorDeciduous                    0.246225   0.053493   4.603 4.17e-06 ***
+# landuse_factorMixed                        0.046441   0.032935   1.410    0.159    
+# landuse_factorOpen/shrub/bog               0.046726   0.038996   1.198    0.231    
+# landuse_factorNew forest                   0.370941   0.027476  13.500  < 2e-16 ***
+# log(state_d + 0.01):time_categoryNight    -0.015985   0.094281  -0.170    0.865    
+# log(state_d + 0.01):time_categoryTwilight -0.202900   0.125370  -1.618    0.106    
+# sqrt(local_d):time_categoryNight          -0.033946   0.005518  -6.152 7.65e-10 ***
+# sqrt(local_d):time_categoryTwilight       -0.004758   0.008268  -0.575    0.565  
+
+
+TMBStruc_t3 <- glmmTMB(
+  case_ ~ log(sl_) + cos(ta_) + 
+    log(state_d + 0.01) + sqrt(local_d) +
+    log(slope) + landuse_factor +
+    log(state_d + 0.01):season + sqrt(local_d):season +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3_original,
+  doFit = FALSE
+)
+
+TMBStruc_t3$parameters$theta[1] = log(1e3)  
+TMBStruc_t3$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm_t3 <- glmmTMB:::fitTMB(TMBStruc_t3)
+summary(model_glmm_t3)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  404728.6  404893.1 -202348.3  404696.6    216420 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 2.053e-01    0.4531
+# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+# 
+# Conditional model:
+#                                   Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                      -6.493282   7.140459  -0.909   0.3632    
+# log(sl_)                          0.124121   0.007320  16.957  < 2e-16 ***
+# cos(ta_)                          0.012355   0.011879   1.040   0.2983    
+# log(state_d + 0.01)               0.459277   0.080104   5.733 9.84e-09 ***
+# sqrt(local_d)                     0.025652   0.004267   6.012 1.83e-09 ***
+# log(slope)                       -0.008532   0.008798  -0.970   0.3321    
+# landuse_factorHuman-modified     -0.269821   0.046742  -5.773 7.81e-09 ***
+# landuse_factorDeciduous           0.254336   0.053541   4.750 2.03e-06 ***
+# landuse_factorMixed               0.048341   0.032930   1.468   0.1421    
+# landuse_factorOpen/shrub/bog      0.053068   0.039021   1.360   0.1738    
+# landuse_factorNew forest          0.372828   0.027482  13.566  < 2e-16 ***
+# log(state_d + 0.01):seasonSpring -0.105386   0.114822  -0.918   0.3587    
+# log(state_d + 0.01):seasonWinter -0.180944   0.101855  -1.776   0.0757 .  
+# sqrt(local_d):seasonSpring       -0.006009   0.006745  -0.891   0.3731    
+# sqrt(local_d):seasonWinter       -0.029136   0.005945  -4.901 9.54e-07 ***
+
 #------------------------------------------------- making road crossing detection -----------------------
 
 steps3$row_id <- 1:nrow(steps3)
@@ -2025,7 +2192,7 @@ ggplot(used_steps, aes(x = ta_ * (180/pi), fill = dist_band)) +
 
 
 
-ggplot(used_steps, aes(x = log(sl_), fill = dist_band)) +
+ggplot(used_steps, aes(x = sl_, fill = dist_band)) +
   geom_density(alpha = 0.5) +
   facet_wrap(~ dist_band) +
   labs(x = "Log step length, m", y = "Density",
@@ -2033,6 +2200,16 @@ ggplot(used_steps, aes(x = log(sl_), fill = dist_band)) +
 
 
 
+ggplot(used_steps, aes(x = log(sl_))) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Step length, m", y = "Density",
+       title = "Distribution of step length")
+
+
+
+ggplot(steps3, aes(x = slope)) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Slope, degrees", y = "Density")
 
 ```
 
@@ -2210,7 +2387,7 @@ summary(model_glmm3.1)
 
 ```{r inspect variables}
 
-
+# --- correlations ----
 
 numeric_predictors <- steps3 %>% select(-"x1_", -"x2_", -"y1_", -"y2_", "burst_", "step_id_")
 
@@ -2246,15 +2423,65 @@ corrplot(het_cor$correlations, method = "color",
 
 
 
+# ---- distributions? ---------
+
+
+ggplot(used_steps, aes(x = log(sl_))) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Step length, m", y = "Density",
+       title = "Distribution of step length")
+
+
+
+ggplot(steps3_original, aes(x = slope)) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Slope, degrees", y = "Count")
+
+ggplot(steps3_original, aes(x = sl_)) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Step length, m", y = "Count")
+
+ggplot(steps3_original, aes(x = state_d)) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Distance to state roads, m", y = "Count")
+
+ggplot(steps3_original, aes(x = local_d)) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Distance to local roads, m", y = "Count")
+
+ggplot(steps3_original, aes(x = ta_)) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Turning angle, radians", y = "Count")
+
+# transformations -> what to make?
+
+ggplot(steps3_original, aes(x = log(slope))) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Slope, degrees", y = "Count")
+
+ggplot(steps3_original, aes(x = log(sl_))) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "log step length, m", y = "Count")
+
+ggplot(steps3_original, aes(x = log(state_d + 0.01))) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "Log distance to state roads, m + 0.01", y = "Count")
+
+ggplot(steps3_original, aes(x = sqrt(local_d))) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "sqrt distance to local roads, m", y = "Count")
+
+ggplot(steps3_original, aes(x = cos(ta_))) +
+  geom_histogram(alpha = 0.5) +
+  labs(x = "cos (turning angle in radians)", y = "Count")
+
 # ---------------- crossings as not significant -----------------------
 used_steps <- steps3[steps3$case_ == TRUE,]
-
 
 crossing_counts_state <- table(
   Time = used_steps$time_category[used_steps$crosses_state == TRUE],
   Season = used_steps$season[used_steps$crosses_state == TRUE]
 )
-
 #           Season
 # Time       Winter Summer Spring
 #   Day           3      1      6
@@ -2265,7 +2492,6 @@ crossing_counts_local <- table(
   Time = used_steps$time_category[used_steps$crosses_local == TRUE],
   Season = used_steps$season[used_steps$crosses_local == TRUE]
 )
-
 #           Season
 # Time       Winter Summer Spring
 #   Day          44    136     81
@@ -2275,29 +2501,6 @@ crossing_counts_local <- table(
 
 # > sum(crossing_counts_local$Freq[crossing_counts_local$Time == "Day"])
 # [1] 261
-# > sum(crossing_counts_local$Freq[crossing_counts_local$Time == "Night"])
-# [1] 385
-# > sum(crossing_counts_local$Freq[crossing_counts_local$Time == "Twilight"])
-# [1] 110
-# > sum(crossing_counts_state$Freq[crossing_counts_stateTime == "Twilight"])
-# Error: object 'crossing_counts_stateTime' not found
-# > sum(crossing_counts_state$Freq[crossing_counts_state$Time == "Twilight"])
-# [1] 9
-# > sum(crossing_counts_state$Freq[crossing_counts_state$Time == "Night"])
-# [1] 30
-# > sum(crossing_counts_state$Freq[crossing_counts_state$Time == "Day"])
-# [1] 10
-# > sum(crossing_counts_state$Freq[crossing_counts_state$Season == "Winter"])
-# [1] 24
-# > sum(crossing_counts_state$Freq[crossing_counts_state$Season == "Spring"])
-# [1] 16
-# > sum(crossing_counts_state$Freq[crossing_counts_state$Season == "Summer"])
-# [1] 9
-# > sum(crossing_counts_local$Freq[crossing_counts_local$Season == "Summer"])
-# [1] 289
-# > sum(crossing_counts_local$Freq[crossing_counts_local$Season == "Spring"])
-# [1] 190
-# > sum(crossing_counts_local$Freq[crossing_counts_local$Season == "Winter"])
 
 
 ```
@@ -2508,7 +2711,7 @@ ggplot(all_data, aes(x = category, y = mean,
                width = 0.2, position = position_dodge(0.1)) +
   facet_wrap(~ category_type, scales = "free_x") +
   scale_y_continuous(name = "Distance, m", limits = c(0, 2500)) +
-  scale_color_manual(values = c("#C4A484", "#E6550D"),
+  scale_color_manual(values = c("#ba936b", "#E6550D"),
     labels = c("Local road", "State road")) +
   labs(title = "Average distance to road types",
        color = "") +
