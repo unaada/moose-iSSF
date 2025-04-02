@@ -171,11 +171,21 @@ tracks %>%
   # filter(month == "Nov") %>%
   # summarise(num_days = n_distinct(as.Date(start)))
 
-  
+# filter data based on the inspection...
+
+tracks_filtered <- tracks %>%
+  filter(dt_min <= 60) %>%
+  mutate(
+    month = factor(lubridate::month(start, label = TRUE)),
+    hour = lubridate::hour(start)
+  ) %>%
+  filter(!(month == "Sep"))
 
 # -------------------------------------------------Filter for just August data at hour 20---------
 august_hour20 <- tracks_filtered %>%
   filter(month == "Aug", hour == 20)
+
+head(august_hour20, 5)
 
 august_hour20_by_day <- august_hour20 %>%
   mutate(day_string = substr(start, 9, 10)) %>% # Extract just the day part manually
@@ -185,7 +195,7 @@ august_hour20_by_day <- august_hour20 %>%
     avg_speed = mean(speed_kph),
     max_speed = max(speed_kph)
   ) %>%
-  arrange(count)
+  arrange(desc(avg_speed))
 
 august_hour20_by_day
 
@@ -203,6 +213,23 @@ ggplot(august_hour20_by_day, aes(x = day_string, y = avg_speed)) +
   theme_minimal()
 
 
+# Filter for August 31st data only
+aug31_data <- august_hour20 %>%
+  filter(substr(start, 9, 10) == "31")
+
+# Group by moose ID to see which ones have highest speeds
+aug31_by_moose <- aug31_data %>%
+  group_by(group_id) %>%
+  summarize(
+    sample_size = n(),
+    avg_speed_kph = mean(speed_kph),
+    max_speed_kph = max(speed_kph),
+    median_speed_kph = median(speed_kph)
+  ) %>%
+  arrange(desc(max_speed_kph))  # Sort by maximum speed
+
+# View the result
+aug31_by_moose
 
 
 # -------------------------------------------------Filter for just november data at hour 16---------
@@ -237,15 +264,7 @@ ggplot(nov, aes(x = day_string, y = max_speed)) +
 
 
 
-# filter data based on the inspection...
 
-tracks_filtered <- tracks %>%
-  filter(dt_min <= 60) %>%
-  mutate(
-    month = factor(lubridate::month(start, label = TRUE)),
-    hour = lubridate::hour(start)
-  ) %>%
-  filter(!(month == "Sep"))
 
 heatmap_data <- tracks_filtered %>%
   group_by(month, hour) %>%

@@ -119,9 +119,61 @@ head(dat1,8)
 dat2 <- dat1 %>% 
   mutate(dat.resample = map(data, ~ track_resample(., 
                                                    rate = lubridate::minutes(30), 
-                                                   tolerance = lubridate::minutes(2)))) 
+                                                   tolerance = lubridate::minutes(4)))) 
 
 head(dat2)
+
+# id
+# <int>
+# data
+# <list>
+# dat.resample
+# <list>
+# 39789	<S3: track_xyt>	<S3: track_xyt>		
+# 39787	<S3: track_xyt>	<S3: track_xyt>		
+# 39785	<S3: track_xyt>	<S3: track_xyt>		
+# 39788	<S3: track_xyt>	<S3: track_xyt>		
+# 39793	<S3: track_xyt>	<S3: track_xyt>		
+# 39791	<S3: track_xyt>	<S3: track_xyt>	
+
+# ----------- sample period ------------
+
+# sample period for each moose
+time_summary <- moose %>%
+  group_by(id) %>%
+  summarize(
+    start_date = format(min(t_), "%Y/%m/%d"),
+    end_date = format(max(t_), "%Y/%m/%d"),
+    sample_period = paste(start_date, "–", end_date)
+  )
+
+total_steps <- moose %>%
+  group_by(id) %>%
+  summarize(actual_steps = n())
+
+active_steps <- moose_filter %>%
+  group_by(id) %>%
+  summarize(active_steps = n())
+
+# combine all information
+result_table <- time_summary %>%
+  left_join(total_steps, by = "id") %>%
+  left_join(active_steps, by = "id") %>%
+  mutate(
+    inactive_steps = actual_steps - active_steps,
+  ) %>%
+  dplyr::select(id, sample_period, actual_steps, active_steps, inactive_steps)
+
+formatted_table <- result_table %>%
+  rename(`Individual Id` = id,
+         `Sample Period` = sample_period,
+         `Number of actual steps` = actual_steps,
+         `Number of active steps` = active_steps,
+         `Number of inactive steps` = inactive_steps)
+
+formatted_table
+
+
 ```
 
 
@@ -359,15 +411,6 @@ steps3$season <- factor(steps3$season) %>% relevel(ref = "Summer")
 
 # create an original (before scaling) variable
 steps3_original <- steps3
-
-# scale the continuous variables for convergance and making them comparable
-steps3$l_sl_ <- scale(log(steps3$sl_))
-steps3$cos_ta_ <- scale(cos(steps3$ta_))
-steps3$l_minor_d <- scale(log(steps3$minor_d + 0.01))
-steps3$l_major_d <- scale(log(steps3$major_d + 0.01))
-steps3$l_local_d <- scale(sqrt(steps3$local_d + 0.01))
-steps3$l_state_d <- scale(log(steps3$state_d + 0.01))
-steps3$l_slope <- scale(log(steps3$slope))
 
 steps3$s_sl_ <- scale(steps3$sl_)
 steps3$s_ta_ <- scale(cos(steps3$ta_))
@@ -3878,4 +3921,3 @@ print(local_basic_plot)
 
 
 ```
-
