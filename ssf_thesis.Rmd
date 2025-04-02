@@ -308,15 +308,30 @@ burst_id_map <- as.data.frame(all_moose) %>%
   dplyr::select(id, burst_) %>%
   distinct()
 
-set.seed(12345) 
-# regular generation of steps
-steps <- all_moose %>%
-  steps_by_burst() %>%
-  random_steps(n_control = 10, 
-              sl_distr = fit_distr(.$sl_, "gamma"),
-              ta_distr = fit_distr(.$ta_, "vonmises"), 
-              include_observed = TRUE) %>% 
-  remove_incomplete_strata()
+
+# --------------------------------------- DO NOT TOUCH OR RUN THIS --------------------------
+
+# set.seed(456) 
+# # regular generation of steps
+# steps <- all_moose %>%
+#   steps_by_burst() %>%
+#   random_steps(n_control = 10, 
+#               sl_distr = fit_distr(.$sl_, "gamma"),
+#               ta_distr = fit_distr(.$ta_, "vonmises"), 
+#               include_observed = TRUE) %>% 
+#   remove_incomplete_strata()
+# 
+# 
+# saveRDS(steps, "steps_data_fixed.rds")
+# 
+
+
+
+# ----------------------------------------------------------------- start working only from HERE --------------
+
+
+steps <- readRDS("steps_data_fixed.rds")
+
 
 # try to join back the moose id to have for glmmm as random effect
 steps <- steps %>%
@@ -420,11 +435,14 @@ steps3$s_local_d <- scale(steps3$local_d)
 steps3$s_state_d <- scale(steps3$state_d)
 steps3$s_slope <- scale(steps3$slope)
 
+steps3$num_case_ <- as.numeric(steps3$case_)
+
 ```
 
 
 
 ```{r base movement model}
+
 
 #----------------------------------------------------- glmm ----------------------------------------------------
 
@@ -451,11 +469,28 @@ model_glmm1 <- glmmTMB:::fitTMB(TMBStruc1)
 
 summary(model_glmm1)
 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405766.9  405900.6 -202870.4  405740.9    216962 
+
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -3.068020   7.123379  -0.431  0.66669    
+# s_sl_                         0.135530   0.006661  20.348  < 2e-16 ***
+# s_ta_                         0.006911   0.007514   0.920  0.35773    
+# s_slope                      -0.010967   0.009679  -1.133  0.25718    
+# s_minor_d                     0.258421   0.087759   2.945  0.00323 ** 
+# s_major_d                     0.155094   0.092519   1.676  0.09367 .  
+# s_local_d                     0.086606   0.022225   3.897 9.75e-05 ***
+# landuse_factorHuman-modified -0.302504   0.046171  -6.552 5.69e-11 ***
+# landuse_factorDeciduous       0.265583   0.053662   4.949 7.45e-07 ***
+# landuse_factorMixed           0.066082   0.032755   2.017  0.04365 *  
+# landuse_factorOpen/shrub/bog  0.058928   0.038842   1.517  0.12923    
+# landuse_factorNew forest      0.373752   0.027322  13.679  < 2e-16 ***
+
 
 # ---- basic with 2 road categories -------
 
 TMBStruc1.1 <- glmmTMB(
-  num_case_ ~ -1 + s_sl_ + s_ta_ +
+  num_case_ ~ s_sl_ + s_ta_ +
     s_state_d + s_local_d + s_slope +
     landuse_factor +
     (1 | str_ID) +   
@@ -470,13 +505,36 @@ TMBStruc1.1$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm1.1 <- glmmTMB:::fitTMB(TMBStruc1.1)
 summary(model_glmm1.1)
 
-
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405751.8  405875.2 -202863.9  405727.8    216963 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.471e-01    0.3836
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -3.071685   7.123302  -0.431 0.666311    
+# s_sl_                         0.135458   0.006669  20.311  < 2e-16 ***
+# s_ta_                         0.007171   0.007516   0.954 0.340005    
+# s_state_d                     0.401864   0.076845   5.230 1.70e-07 ***
+# s_local_d                     0.075211   0.022237   3.382 0.000719 ***
+# s_slope                      -0.010515   0.009678  -1.086 0.277306    
+# landuse_factorHuman-modified -0.300789   0.046147  -6.518 7.12e-11 ***
+# landuse_factorDeciduous       0.266532   0.053649   4.968 6.76e-07 ***
+# landuse_factorMixed           0.069606   0.032762   2.125 0.033622 *  
+# landuse_factorOpen/shrub/bog  0.060784   0.038823   1.566 0.117428    
+# landuse_factorNew forest      0.377748   0.027334  13.820  < 2e-16 ***
 
 # ----------------------------------------- basic with 2 road categories -1 -------------------------
 
-#pls check what to remove
+# remove ta_
 TMBStruc1.1.1 <- glmmTMB(
-  num_case_ ~ -1 + s_sl_ + s_ta_ +
+  num_case_ ~ s_sl_ +
     s_state_d + s_local_d + s_slope +
     landuse_factor +
     (1 | str_ID) +   
@@ -491,14 +549,79 @@ TMBStruc1.1.1$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm1.1.1 <- glmmTMB:::fitTMB(TMBStruc1.1.1)
 summary(model_glmm1.1.1)
 
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405750.7  405863.9 -202864.4  405728.7    216964 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.504e-01    0.3878
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -3.069803   7.123382  -0.431 0.666507    
+# s_sl_                         0.135573   0.006668  20.331  < 2e-16 ***
+# s_state_d                     0.400414   0.076772   5.216 1.83e-07 ***
+# s_local_d                     0.074520   0.022210   3.355 0.000793 ***
+# s_slope                      -0.010405   0.009675  -1.075 0.282171    
+# landuse_factorHuman-modified -0.299346   0.046106  -6.493 8.44e-11 ***
+# landuse_factorDeciduous       0.266779   0.053635   4.974 6.56e-07 ***
+# landuse_factorMixed           0.069763   0.032753   2.130 0.033175 *  
+# landuse_factorOpen/shrub/bog  0.061151   0.038810   1.576 0.115101    
+# landuse_factorNew forest      0.377913   0.027328  13.829  < 2e-16 ***
+--- 
+
+
+# remove slope
+TMBStruc1.1.2 <- glmmTMB(
+  num_case_ ~  s_sl_ +
+    s_state_d + s_local_d +
+    landuse_factor +
+    (1 | str_ID) +   
+    (1 | id), 
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc1.1.2$parameters$theta[1] = log(1e3)  
+TMBStruc1.1.2$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm1.1.2 <- glmmTMB:::fitTMB(TMBStruc1.1.2)
+summary(model_glmm1.1.2)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405749.9  405852.7 -202864.9  405729.9    216965 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev. 
+#  str_ID (Intercept) 1.00e+06 1000.0000
+#  id     (Intercept) 1.51e-01    0.3886
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                               Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                  -3.064139   7.123372  -0.430 0.667084    
+# s_sl_                         0.135522   0.006668  20.324  < 2e-16 ***
+# s_state_d                     0.402493   0.076747   5.244 1.57e-07 ***
+# s_local_d                     0.076248   0.022151   3.442 0.000577 ***
+# landuse_factorHuman-modified -0.304175   0.045889  -6.628 3.39e-11 ***
+# landuse_factorDeciduous       0.264726   0.053602   4.939 7.86e-07 ***
+# landuse_factorMixed           0.068536   0.032733   2.094 0.036281 *  
+# landuse_factorOpen/shrub/bog  0.060289   0.038801   1.554 0.120229    
+# landuse_factorNew forest      0.376229   0.027284  13.789  < 2e-16 ***
 
 
 # --- landuse local -----
 
 TMBStruc_local <- glmmTMB(
-  num_case_ ~ -1 + s_sl_ + s_ta_ + s_slope +
+  num_case_ ~ s_sl_ + s_ta_ + s_slope +
     s_local_d +
-    landuse_factor + s_local_d:landuse_factor +
+    landuse_factor + landuse_factor:s_local_d +
     (1 | str_ID) +   
     (1 | id), 
   family = poisson,
@@ -513,33 +636,33 @@ summary(model_glmm_local)
 
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404788.6  404953.1 -202378.3  404756.6    216420 
+#  405770.4  405935.0 -202869.2  405738.4    216959 
 # 
 # Random effects:
 # 
 # Conditional model:
 #  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 2.392e-05 4.891e-03
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.493e-01    0.3865
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
-#                                         Estimate Std. Error z value Pr(>|z|)    
-# s_sl_                                   0.131862   0.006678  19.747  < 2e-16 ***
-# s_ta_                                   0.004546   0.007517   0.605  0.54536    
-# s_slope                                -0.009452   0.009670  -0.977  0.32834    
-# s_local_d                               0.048188   0.028617   1.684  0.09220 .  
-# landuse_factorConiferous               -3.001944   7.129086  -0.421  0.67369    
-# landuse_factorHuman-modified           -3.257871   7.129369  -0.457  0.64770    
-# landuse_factorDeciduous                -2.817324   7.129244  -0.395  0.69271    
-# landuse_factorMixed                    -2.969922   7.129087  -0.417  0.67698    
-# landuse_factorOpen/shrub/bog           -2.972250   7.129121  -0.417  0.67674    
-# landuse_factorNew forest               -2.644663   7.129073  -0.371  0.71066    
-# s_local_d:landuse_factorHuman-modified  0.125323   0.074469   1.683  0.09240 .  
-# s_local_d:landuse_factorDeciduous       0.138984   0.050534   2.750  0.00595 ** 
-# s_local_d:landuse_factorMixed           0.070756   0.033245   2.128  0.03331 *  
-# s_local_d:landuse_factorOpen/shrub/bog  0.009372   0.032859   0.285  0.77547    
-# s_local_d:landuse_factorNew forest      0.027141   0.028062   0.967  0.33345   
+#                                          Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                            -3.060e+00  7.123e+00  -0.430 0.667485    
+# s_sl_                                   1.364e-01  6.661e-03  20.477  < 2e-16 ***
+# s_ta_                                   6.675e-03  7.513e-03   0.888 0.374286    
+# s_slope                                -1.172e-02  9.676e-03  -1.211 0.225753    
+# s_local_d                               6.399e-02  2.852e-02   2.244 0.024863 *  
+# landuse_factorHuman-modified           -2.357e-01  7.185e-02  -3.280 0.001037 ** 
+# landuse_factorDeciduous                 1.944e-01  5.816e-02   3.343 0.000827 ***
+# landuse_factorMixed                     6.197e-02  3.321e-02   1.866 0.062010 .  
+# landuse_factorOpen/shrub/bog            5.628e-02  3.943e-02   1.427 0.153478    
+# landuse_factorNew forest                3.654e-01  2.758e-02  13.248  < 2e-16 ***
+# s_local_d:landuse_factorHuman-modified  1.314e-01  7.510e-02   1.750 0.080180 .  
+# s_local_d:landuse_factorDeciduous       1.517e-01  5.115e-02   2.965 0.003025 ** 
+# s_local_d:landuse_factorMixed           6.199e-02  3.324e-02   1.865 0.062184 .  
+# s_local_d:landuse_factorOpen/shrub/bog -1.316e-02  3.251e-02  -0.405 0.685712    
+# s_local_d:landuse_factorNew forest     -1.521e-05  2.806e-02  -0.001 0.999568  
 
 
 
@@ -548,7 +671,7 @@ summary(model_glmm_local)
 TMBStruc_local.1 <- glmmTMB(
   num_case_ ~ s_sl_ + s_slope +
     s_local_d +
-    landuse_factor + s_local_d:landuse_factor +
+    landuse_factor + landuse_factor:s_local_d +
     (1 | str_ID) +   
     (1 | id), 
   family = poisson,
@@ -562,39 +685,39 @@ model_glmm_local.1 <- glmmTMB:::fitTMB(TMBStruc_local.1)
 summary(model_glmm_local.1)
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404786.9  404941.2 -202378.5  404756.9    216421 
+#  405769.2  405923.5 -202869.6  405739.2    216960 
 # 
 # Random effects:
 # 
 # Conditional model:
-#  Groups Name        Variance Std.Dev. 
-#  str_ID (Intercept) 1.00e+06 1000.0000
-#  id     (Intercept) 1.47e-01    0.3834
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.448e-01    0.3805
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
-#                                         Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                            -3.048648   7.132131  -0.427 0.669050    
-# s_sl_                                   0.131926   0.006677  19.759  < 2e-16 ***
-# s_slope                                -0.009368   0.009667  -0.969 0.332535    
-# s_local_d                               0.047722   0.028596   1.669 0.095155 .  
-# landuse_factorHuman-modified           -0.255143   0.071291  -3.579 0.000345 ***
-# landuse_factorDeciduous                 0.184688   0.057649   3.204 0.001357 ** 
-# landuse_factorMixed                     0.032077   0.033222   0.966 0.334272    
-# landuse_factorOpen/shrub/bog            0.029870   0.039391   0.758 0.448278    
-# landuse_factorNew forest                0.357443   0.027616  12.944  < 2e-16 ***
-# s_local_d:landuse_factorHuman-modified  0.125067   0.074451   1.680 0.092984 .  
-# s_local_d:landuse_factorDeciduous       0.138967   0.050526   2.750 0.005952 ** 
-# s_local_d:landuse_factorMixed           0.070726   0.033240   2.128 0.033357 *  
-# s_local_d:landuse_factorOpen/shrub/bog  0.009507   0.032853   0.289 0.772302    
-# s_local_d:landuse_factorNew forest      0.027093   0.028058   0.966 0.334241  
+#                                          Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                            -3.061e+00  7.123e+00  -0.430 0.667433    
+# s_sl_                                   1.365e-01  6.661e-03  20.496  < 2e-16 ***
+# s_slope                                -1.161e-02  9.673e-03  -1.200 0.230164    
+# s_local_d                               6.335e-02  2.850e-02   2.223 0.026225 *  
+# landuse_factorHuman-modified           -2.346e-01  7.182e-02  -3.267 0.001088 ** 
+# landuse_factorDeciduous                 1.947e-01  5.814e-02   3.349 0.000811 ***
+# landuse_factorMixed                     6.213e-02  3.320e-02   1.872 0.061272 .  
+# landuse_factorOpen/shrub/bog            5.661e-02  3.942e-02   1.436 0.150960    
+# landuse_factorNew forest                3.655e-01  2.757e-02  13.256  < 2e-16 ***
+# s_local_d:landuse_factorHuman-modified  1.310e-01  7.507e-02   1.745 0.081061 .  
+# s_local_d:landuse_factorDeciduous       1.516e-01  5.114e-02   2.965 0.003028 ** 
+# s_local_d:landuse_factorMixed           6.188e-02  3.323e-02   1.862 0.062603 .  
+# s_local_d:landuse_factorOpen/shrub/bog -1.309e-02  3.250e-02  -0.403 0.687202    
+# s_local_d:landuse_factorNew forest     -8.502e-05  2.806e-02  -0.003 0.997582    
 
 # remove slope  
 
 TMBStruc_local.2 <- glmmTMB(
   num_case_ ~ s_sl_ +
     s_local_d +
-    landuse_factor + s_local_d:landuse_factor +
+    landuse_factor + landuse_factor:s_local_d +
     (1 | str_ID) +   
     (1 | id), 
   family = poisson,
@@ -608,39 +731,39 @@ model_glmm_local.2 <- glmmTMB:::fitTMB(TMBStruc_local.2)
 summary(model_glmm_local.2)
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404785.9  404929.9 -202378.9  404757.9    216422 
+#  405768.6  405912.6 -202870.3  405740.6    216961 
 # 
 # Random effects:
 # 
 # Conditional model:
 #  Groups Name        Variance  Std.Dev. 
 #  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 1.456e-01    0.3816
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  id     (Intercept) 1.441e-01    0.3796
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
-#                                         Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                            -3.054098   7.132104  -0.428 0.668492    
-# s_sl_                                   0.131924   0.006677  19.759  < 2e-16 ***
-# s_local_d                               0.049407   0.028544   1.731 0.083467 .  
-# landuse_factorHuman-modified           -0.259577   0.071123  -3.650 0.000263 ***
-# landuse_factorDeciduous                 0.183080   0.057632   3.177 0.001489 ** 
-# landuse_factorMixed                     0.031115   0.033208   0.937 0.348765    
-# landuse_factorOpen/shrub/bog            0.029302   0.039388   0.744 0.456909    
-# landuse_factorNew forest                0.355953   0.027575  12.908  < 2e-16 ***
-# s_local_d:landuse_factorHuman-modified  0.125087   0.074419   1.681 0.092791 .  
-# s_local_d:landuse_factorDeciduous       0.138424   0.050531   2.739 0.006155 ** 
-# s_local_d:landuse_factorMixed           0.070923   0.033236   2.134 0.032849 *  
-# s_local_d:landuse_factorOpen/shrub/bog  0.009228   0.032853   0.281 0.778788    
-# s_local_d:landuse_factorNew forest      0.026791   0.028055   0.955 0.339601 
+#                                          Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                            -3.0600736  7.1232315  -0.430 0.667493    
+# s_sl_                                   0.1364440  0.0066600  20.487  < 2e-16 ***
+# s_local_d                               0.0653395  0.0284483   2.297 0.021631 *  
+# landuse_factorHuman-modified           -0.2396922  0.0716549  -3.345 0.000823 ***
+# landuse_factorDeciduous                 0.1925738  0.0581169   3.314 0.000921 ***
+# landuse_factorMixed                     0.0608456  0.0331817   1.834 0.066697 .  
+# landuse_factorOpen/shrub/bog            0.0556832  0.0394121   1.413 0.157701    
+# landuse_factorNew forest                0.3636295  0.0275284  13.209  < 2e-16 ***
+# s_local_d:landuse_factorHuman-modified  0.1314330  0.0750366   1.752 0.079845 .  
+# s_local_d:landuse_factorDeciduous       0.1510719  0.0511419   2.954 0.003137 ** 
+# s_local_d:landuse_factorMixed           0.0622137  0.0332238   1.873 0.061129 .  
+# s_local_d:landuse_factorOpen/shrub/bog -0.0131094  0.0324991  -0.403 0.686670    
+# s_local_d:landuse_factorNew forest     -0.0002223  0.0280526  -0.008 0.993678  
 
 
 # ---- landuse state -----
 
 TMBStruc_state<- glmmTMB(
-  num_case_ ~ -1 +  s_sl_ + s_ta_ + s_slope +
+  num_case_ ~ s_sl_ + s_ta_ + s_slope +
     s_state_d +
-    landuse_factor + s_state_d:landuse_factor +
+    landuse_factor + landuse_factor:s_state_d +
     (1 | str_ID) +   
     (1 | id), 
   family = poisson,
@@ -654,41 +777,40 @@ model_glmm_state <- glmmTMB:::fitTMB(TMBStruc_state)
 summary(model_glmm_state)
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404719.2  404883.8 -202343.6  404687.2    216420 
+#  405702.2  405866.8 -202835.1  405670.2    216959 
 # 
 # Random effects:
 # 
 # Conditional model:
 #  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 2.943e-05 5.425e-03
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.474e-01    0.3839
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
 #                                         Estimate Std. Error z value Pr(>|z|)    
-# s_sl_                                   0.132994   0.006690  19.878  < 2e-16 ***
-# s_ta_                                   0.005011   0.007519   0.666  0.50512    
-# s_slope                                -0.007560   0.009677  -0.781  0.43468    
-# s_state_d                               0.369134   0.079529   4.642 3.46e-06 ***
-# landuse_factorConiferous               -3.012164   7.129078  -0.423  0.67265    
-# landuse_factorHuman-modified           -3.319284   7.129150  -0.466  0.64151    
-# landuse_factorDeciduous                -2.708073   7.129252  -0.380  0.70405    
-# landuse_factorMixed                    -2.970496   7.129079  -0.417  0.67692    
-# landuse_factorOpen/shrub/bog           -2.959725   7.129113  -0.415  0.67802    
-# landuse_factorNew forest               -2.648850   7.129064  -0.372  0.71022    
-# s_state_d:landuse_factorHuman-modified  0.214065   0.041918   5.107 3.28e-07 ***
-# s_state_d:landuse_factorDeciduous       0.154110   0.077419   1.991  0.04653 *  
-# s_state_d:landuse_factorMixed          -0.087178   0.032908  -2.649  0.00807 ** 
-# s_state_d:landuse_factorOpen/shrub/bog -0.058494   0.038176  -1.532  0.12547    
-# s_state_d:landuse_factorNew forest     -0.009961   0.029008  -0.343  0.73132   
-
+# (Intercept)                            -3.077922   7.123305  -0.432  0.66567    
+# s_sl_                                   0.137405   0.006677  20.580  < 2e-16 ***
+# s_ta_                                   0.006878   0.007513   0.915  0.35993    
+# s_slope                                -0.010395   0.009670  -1.075  0.28235    
+# s_state_d                               0.368754   0.079314   4.649 3.33e-06 ***
+# landuse_factorHuman-modified           -0.306603   0.046443  -6.602 4.06e-11 ***
+# landuse_factorDeciduous                 0.339015   0.058831   5.762 8.29e-09 ***
+# landuse_factorMixed                     0.066229   0.033053   2.004  0.04510 *  
+# landuse_factorOpen/shrub/bog            0.072814   0.039372   1.849  0.06441 .  
+# landuse_factorNew forest                0.371223   0.027494  13.502  < 2e-16 ***
+# s_state_d:landuse_factorHuman-modified  0.232146   0.041981   5.530 3.21e-08 ***
+# s_state_d:landuse_factorDeciduous       0.229146   0.078063   2.935  0.00333 ** 
+# s_state_d:landuse_factorMixed          -0.063376   0.032796  -1.932  0.05331 .  
+# s_state_d:landuse_factorOpen/shrub/bog -0.038827   0.038113  -1.019  0.30833    
+# s_state_d:landuse_factorNew forest      0.017778   0.028997   0.613  0.53982  
 # remove non significant ta_ parameter
 
 
 TMBStruc_state.1<- glmmTMB(
-  num_case_ ~ -1 +  s_sl_  + s_slope +
+  num_case_ ~  s_sl_  + s_slope +
     s_state_d +
-    landuse_factor + s_state_d:landuse_factor +
+    landuse_factor + landuse_factor:s_state_d +
     (1 | str_ID) +   
     (1 | id), 
   family = poisson,
@@ -702,41 +824,40 @@ model_glmm_state.1 <- glmmTMB:::fitTMB(TMBStruc_state.1)
 summary(model_glmm_state.1)
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404717.7  404871.9 -202343.8  404687.7    216421 
+#  405701.1  405855.4 -202835.5  405671.1    216960 
 # 
 # Random effects:
 # 
 # Conditional model:
 #  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 2.987e-05 5.465e-03
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.486e-01    0.3855
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
 #                                         Estimate Std. Error z value Pr(>|z|)    
-# s_sl_                                   0.133068   0.006690  19.891  < 2e-16 ***
-# s_slope                                -0.007465   0.009674  -0.772   0.4403    
-# s_state_d                               0.368028   0.079469   4.631 3.64e-06 ***
-# landuse_factorConiferous               -3.012717   7.129078  -0.423   0.6726    
-# landuse_factorHuman-modified           -3.318767   7.129149  -0.466   0.6416    
-# landuse_factorDeciduous                -2.708587   7.129252  -0.380   0.7040    
-# landuse_factorMixed                    -2.970957   7.129078  -0.417   0.6769    
-# landuse_factorOpen/shrub/bog           -2.960067   7.129113  -0.415   0.6780    
-# landuse_factorNew forest               -2.649234   7.129064  -0.372   0.7102    
-# s_state_d:landuse_factorHuman-modified  0.213733   0.041904   5.100 3.39e-07 ***
-# s_state_d:landuse_factorDeciduous       0.154177   0.077407   1.992   0.0464 *  
-# s_state_d:landuse_factorMixed          -0.087118   0.032901  -2.648   0.0081 ** 
-# s_state_d:landuse_factorOpen/shrub/bog -0.058451   0.038167  -1.531   0.1257    
-# s_state_d:landuse_factorNew forest     -0.009893   0.029004  -0.341   0.7330    
-
+# (Intercept)                            -3.066156   7.123344  -0.430  0.66688    
+# s_sl_                                   0.137518   0.006676  20.600  < 2e-16 ***
+# s_slope                                -0.010265   0.009666  -1.062  0.28827    
+# s_state_d                               0.367245   0.079241   4.635 3.58e-06 ***
+# landuse_factorHuman-modified           -0.305116   0.046398  -6.576 4.83e-11 ***
+# landuse_factorDeciduous                 0.339323   0.058816   5.769 7.96e-09 ***
+# landuse_factorMixed                     0.066413   0.033044   2.010  0.04445 *  
+# landuse_factorOpen/shrub/bog            0.073103   0.039360   1.857  0.06327 .  
+# landuse_factorNew forest                0.371361   0.027488  13.510  < 2e-16 ***
+# s_state_d:landuse_factorHuman-modified  0.231712   0.041963   5.522 3.36e-08 ***
+# s_state_d:landuse_factorDeciduous       0.229212   0.078048   2.937  0.00332 ** 
+# s_state_d:landuse_factorMixed          -0.063431   0.032789  -1.935  0.05305 .  
+# s_state_d:landuse_factorOpen/shrub/bog -0.038791   0.038101  -1.018  0.30862    
+# s_state_d:landuse_factorNew forest      0.017782   0.028992   0.613  0.53964  
 
 # remove slope parameter
 
 
 TMBStruc_state.2<- glmmTMB(
-  num_case_ ~ -1 +  s_sl_  +
+  num_case_ ~ s_sl_  +
     s_state_d +
-    landuse_factor + s_state_d:landuse_factor +
+    landuse_factor + landuse_factor:s_state_d +
     (1 | str_ID) +   
     (1 | id), 
   family = poisson,
@@ -748,33 +869,34 @@ TMBStruc_state.2$parameters$theta[1] = log(1e3)
 TMBStruc_state.2$mapArg = list(theta = factor(c(NA, 1)))
 model_glmm_state.2 <- glmmTMB:::fitTMB(TMBStruc_state.2)
 summary(model_glmm_state.2)
-# 
+
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404716.3  404860.3 -202344.1  404688.3    216422 
+#  405700.2  405844.2 -202836.1  405672.2    216961 
 # 
 # Random effects:
 # 
 # Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 2.197e-05 4.687e-03
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  Groups Name        Variance Std.Dev. 
+#  str_ID (Intercept) 1.00e+06 1000.0000
+#  id     (Intercept) 1.49e-01    0.3861
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
 #                                         Estimate Std. Error z value Pr(>|z|)    
-# s_sl_                                   0.133074   0.006690  19.893  < 2e-16 ***
-# s_state_d                               0.370273   0.079415   4.663 3.12e-06 ***
-# landuse_factorConiferous               -3.011692   7.129085  -0.422   0.6727    
-# landuse_factorHuman-modified           -3.321322   7.129155  -0.466   0.6413    
-# landuse_factorDeciduous                -2.709405   7.129259  -0.380   0.7039    
-# landuse_factorMixed                    -2.970686   7.129085  -0.417   0.6769    
-# landuse_factorOpen/shrub/bog           -2.959355   7.129120  -0.415   0.6781    
-# landuse_factorNew forest               -2.649305   7.129071  -0.372   0.7102    
-# s_state_d:landuse_factorHuman-modified  0.214545   0.041891   5.121 3.03e-07 ***
-# s_state_d:landuse_factorDeciduous       0.152581   0.077386   1.972   0.0486 *  
-# s_state_d:landuse_factorMixed          -0.087518   0.032895  -2.661   0.0078 ** 
-# s_state_d:landuse_factorOpen/shrub/bog -0.058590   0.038165  -1.535   0.1247    
-# s_state_d:landuse_factorNew forest     -0.009828   0.029002  -0.339   0.7347  
+# (Intercept)                            -3.070353   7.123345  -0.431  0.66645    
+# s_sl_                                   0.137461   0.006675  20.593  < 2e-16 ***
+# s_state_d                               0.369797   0.079203   4.669 3.03e-06 ***
+# landuse_factorHuman-modified           -0.309985   0.046173  -6.713 1.90e-11 ***
+# landuse_factorDeciduous                 0.336595   0.058764   5.728 1.02e-08 ***
+# landuse_factorMixed                     0.065283   0.033027   1.977  0.04808 *  
+# landuse_factorOpen/shrub/bog            0.072472   0.039354   1.842  0.06554 .  
+# landuse_factorNew forest                0.369786   0.027448  13.472  < 2e-16 ***
+# s_state_d:landuse_factorHuman-modified  0.233030   0.041946   5.555 2.77e-08 ***
+# s_state_d:landuse_factorDeciduous       0.227028   0.078026   2.910  0.00362 ** 
+# s_state_d:landuse_factorMixed          -0.063947   0.032782  -1.951  0.05109 .  
+# s_state_d:landuse_factorOpen/shrub/bog -0.038789   0.038097  -1.018  0.30861    
+# s_state_d:landuse_factorNew forest      0.017968   0.028989   0.620  0.53537   
+
 
 #------------------------------------------------------------------season -------------------------------------
 
@@ -1073,7 +1195,7 @@ summary(model_glmm2.0.3)
 
 # ---------------------------------------------------------- time ------------------------------------------
 TMBStruc3 <- glmmTMB(
-  num_case_ ~ -1 + s_sl_ + s_ta_ + s_slope +
+  num_case_ ~ s_sl_ + s_ta_ + s_slope +
     s_minor_d + s_major_d + s_local_d + 
     landuse_factor +
     time_category:s_minor_d + time_category:s_major_d + time_category:s_local_d +
@@ -1093,7 +1215,7 @@ summary(model_glmm3)
 
 
 TMBStruc3.0 <- glmmTMB(
-  num_case_ ~ -1 + s_sl_ + s_ta_ + s_slope +
+  num_case_ ~ s_sl_ + s_ta_ + s_slope +
     s_state_d + s_local_d + 
     landuse_factor +
     time_category:s_state_d + time_category:s_local_d +
@@ -1110,38 +1232,38 @@ model_glmm3.0 <- glmmTMB:::fitTMB(TMBStruc3.0)
 summary(model_glmm3.0)
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404741.2  404905.7 -202354.6  404709.2    216420 
+#  405734.5  405899.1 -202851.3  405702.5    216959 
 # 
 # Random effects:
 # 
 # Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 4.642e-05 6.813e-03
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  Groups Name        Variance Std.Dev. 
+#  str_ID (Intercept) 1.00e+06 1000.0000
+#  id     (Intercept) 1.54e-01    0.3924
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
 #                                  Estimate Std. Error z value Pr(>|z|)    
-# s_sl_                            0.131698   0.006685  19.700  < 2e-16 ***
-# s_ta_                            0.004943   0.007522   0.657   0.5111    
-# s_slope                         -0.008188   0.009681  -0.846   0.3977    
-# s_state_d                        0.270397   0.109603   2.467   0.0136 *  
-# s_local_d                        0.173266   0.031250   5.544 2.95e-08 ***
-# landuse_factorConiferous        -3.000692   7.129093  -0.421   0.6738    
-# landuse_factorHuman-modified    -3.314802   7.129166  -0.465   0.6420    
-# landuse_factorDeciduous         -2.752435   7.129223  -0.386   0.6994    
-# landuse_factorMixed             -2.958609   7.129094  -0.415   0.6781    
-# landuse_factorOpen/shrub/bog    -2.960279   7.129127  -0.415   0.6780    
-# landuse_factorNew forest        -2.633297   7.129080  -0.369   0.7118    
-# s_state_d:time_categoryNight     0.423492   0.166812   2.539   0.0111 *  
-# s_state_d:time_categoryTwilight -0.233257   0.237849  -0.981   0.3267    
-# s_local_d:time_categoryNight    -0.254200   0.048067  -5.288 1.23e-07 ***
-# s_local_d:time_categoryTwilight -0.079333   0.068512  -1.158   0.2469  
+# (Intercept)                     -3.081460   7.123458  -0.433   0.6653    
+# s_sl_                            0.135851   0.006669  20.370  < 2e-16 ***
+# s_ta_                            0.006971   0.007517   0.927   0.3538    
+# s_slope                         -0.010868   0.009688  -1.122   0.2619    
+# s_state_d                        0.256301   0.109390   2.343   0.0191 *  
+# s_local_d                        0.160573   0.031034   5.174 2.29e-07 ***
+# landuse_factorHuman-modified    -0.309913   0.046261  -6.699 2.09e-11 ***
+# landuse_factorDeciduous          0.266943   0.053651   4.976 6.51e-07 ***
+# landuse_factorMixed              0.069934   0.032772   2.134   0.0328 *  
+# landuse_factorOpen/shrub/bog     0.063328   0.038821   1.631   0.1028    
+# landuse_factorNew forest         0.377832   0.027336  13.822  < 2e-16 ***
+# s_state_d:time_categoryNight     0.370654   0.166250   2.229   0.0258 *  
+# s_state_d:time_categoryTwilight  0.104380   0.236822   0.441   0.6594    
+# s_local_d:time_categoryNight    -0.225717   0.047971  -4.705 2.54e-06 ***
+# s_local_d:time_categoryTwilight -0.039823   0.067126  -0.593   0.5530   
 
 #remove ta_ predictor
 
 TMBStruc3.0.1 <- glmmTMB(
-  num_case_ ~ -1 + s_sl_ + s_slope +
+  num_case_ ~  s_sl_ + s_slope +
     s_state_d + s_local_d + 
     landuse_factor +
     time_category:s_state_d + time_category:s_local_d +
@@ -1158,37 +1280,37 @@ model_glmm3.0.1 <- glmmTMB:::fitTMB(TMBStruc3.0.1)
 summary(model_glmm3.0.1)
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404739.6  404893.9 -202354.8  404709.6    216421 
+#  405733.4  405887.7 -202851.7  405703.4    216960 
 # 
 # Random effects:
 # 
 # Conditional model:
 #  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 4.274e-05 6.537e-03
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.524e-01    0.3904
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
 #                                  Estimate Std. Error z value Pr(>|z|)    
-# s_sl_                            0.131766   0.006685  19.712  < 2e-16 ***
-# s_slope                         -0.008105   0.009679  -0.837   0.4024    
-# s_state_d                        0.269412   0.109537   2.460   0.0139 *  
-# s_local_d                        0.172784   0.031226   5.533 3.14e-08 ***
-# landuse_factorConiferous        -3.016721   7.129086  -0.423   0.6722    
-# landuse_factorHuman-modified    -3.329918   7.129159  -0.467   0.6404    
-# landuse_factorDeciduous         -2.768502   7.129216  -0.388   0.6978    
-# landuse_factorMixed             -2.974642   7.129087  -0.417   0.6765    
-# landuse_factorOpen/shrub/bog    -2.976090   7.129120  -0.417   0.6763    
-# landuse_factorNew forest        -2.649173   7.129073  -0.372   0.7102    
-# s_state_d:time_categoryNight     0.423184   0.166722   2.538   0.0111 *  
-# s_state_d:time_categoryTwilight -0.232580   0.237724  -0.978   0.3279    
-# s_local_d:time_categoryNight    -0.254312   0.048044  -5.293 1.20e-07 ***
-# s_local_d:time_categoryTwilight -0.079232   0.068481  -1.157   0.2473  
+# (Intercept)                     -3.080069   7.123421  -0.432   0.6655    
+# s_sl_                            0.135966   0.006668  20.390  < 2e-16 ***
+# s_slope                         -0.010751   0.009685  -1.110   0.2670    
+# s_state_d                        0.254844   0.109298   2.332   0.0197 *  
+# s_local_d                        0.159868   0.031003   5.157 2.52e-07 ***
+# landuse_factorHuman-modified    -0.308505   0.046220  -6.675 2.48e-11 ***
+# landuse_factorDeciduous          0.267235   0.053637   4.982 6.28e-07 ***
+# landuse_factorMixed              0.070115   0.032764   2.140   0.0324 *  
+# landuse_factorOpen/shrub/bog     0.063681   0.038809   1.641   0.1008    
+# landuse_factorNew forest         0.377999   0.027330  13.831  < 2e-16 ***
+# s_state_d:time_categoryNight     0.370753   0.166126   2.232   0.0256 *  
+# s_state_d:time_categoryTwilight  0.104618   0.236656   0.442   0.6584    
+# s_local_d:time_categoryNight    -0.225806   0.047939  -4.710 2.47e-06 ***
+# s_local_d:time_categoryTwilight -0.039562   0.067082  -0.590   0.5553    
 
 
 # remove slope  predictor
 TMBStruc3_3.0.2 <- glmmTMB(
-  num_case_ ~ -1 + s_sl_ + 
+  num_case_ ~ s_sl_ + 
     s_state_d + s_local_d + 
     landuse_factor +
     time_category:s_state_d + time_category:s_local_d +
@@ -1205,34 +1327,31 @@ model_glmm3_3.0.2 <- glmmTMB:::fitTMB(TMBStruc3_3.0.2)
 summary(model_glmm3_3.0.2)
 
 #       AIC       BIC    logLik  deviance  df.resid 
-#  404738.3  404882.3 -202355.2  404710.3    216422 
+#  405732.6  405876.7 -202852.3  405704.6    216961 
 # 
 # Random effects:
 # 
 # Conditional model:
 #  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1.000e+03
-#  id     (Intercept) 3.219e-05 5.674e-03
-# Number of obs: 216436, groups:  str_ID, 19676; id, 8
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.492e-01    0.3863
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
 # 
 # Conditional model:
 #                                  Estimate Std. Error z value Pr(>|z|)    
-# s_sl_                            0.131764   0.006684  19.712  < 2e-16 ***
-# s_state_d                        0.271432   0.109505   2.479   0.0132 *  
-# s_local_d                        0.173947   0.031193   5.576 2.45e-08 ***
-# landuse_factorConiferous        -3.015549   7.129087  -0.423   0.6723    
-# landuse_factorHuman-modified    -3.332529   7.129159  -0.467   0.6402    
-# landuse_factorDeciduous         -2.768835   7.129217  -0.388   0.6977    
-# landuse_factorMixed             -2.974357   7.129088  -0.417   0.6765    
-# landuse_factorOpen/shrub/bog    -2.975509   7.129121  -0.417   0.6764    
-# landuse_factorNew forest        -2.649257   7.129073  -0.372   0.7102    
-# s_state_d:time_categoryNight     0.423209   0.166722   2.538   0.0111 *  
-# s_state_d:time_categoryTwilight -0.232657   0.237713  -0.979   0.3277    
-# s_local_d:time_categoryNight    -0.254077   0.048041  -5.289 1.23e-07 ***
-# s_local_d:time_categoryTwilight -0.079091   0.068477  -1.155   0.2481 
-
-
-
+# (Intercept)                     -3.079240   7.123347  -0.432   0.6655    
+# s_sl_                            0.135899   0.006668  20.382  < 2e-16 ***
+# s_state_d                        0.256677   0.109279   2.349   0.0188 *  
+# s_local_d                        0.161352   0.030972   5.210 1.89e-07 ***
+# landuse_factorHuman-modified    -0.313413   0.046008  -6.812 9.62e-12 ***
+# landuse_factorDeciduous          0.265081   0.053604   4.945 7.61e-07 ***
+# landuse_factorMixed              0.068862   0.032744   2.103   0.0355 *  
+# landuse_factorOpen/shrub/bog     0.062739   0.038800   1.617   0.1059    
+# landuse_factorNew forest         0.376275   0.027286  13.790  < 2e-16 ***
+# s_state_d:time_categoryNight     0.372085   0.166123   2.240   0.0251 *  
+# s_state_d:time_categoryTwilight  0.103251   0.236655   0.436   0.6626    
+# s_local_d:time_categoryNight    -0.225162   0.047934  -4.697 2.64e-06 ***
+# s_local_d:time_categoryTwilight -0.039068   0.067071  -0.582   0.5602    
 
 ```
 
@@ -2367,11 +2486,20 @@ summary(model_glmm3.1)
 
 # --- correlations ----
 
-numeric_predictors <- steps3 %>% select(-"x1_", -"x2_", -"y1_", -"y2_", "burst_", "step_id_")
+
+numeric_predictors <- steps3 %>% 
+  select(sl_, ta_, local_d, slope, state_d)
 
 correlation_matrix <- cor(numeric_predictors, use = "complete.obs")
 
 print(correlation_matrix)
+
+#                  sl_          ta_      local_d        slope      state_d
+# sl_      1.000000000 -0.004054380 -0.010293914  0.012584876  0.005188543
+# ta_     -0.004054380  1.000000000 -0.001068038 -0.001814821 -0.001102120
+# local_d -0.010293914 -0.001068038  1.000000000 -0.161475131  0.069548081
+# slope    0.012584876 -0.001814821 -0.161475131  1.000000000 -0.075171182
+# state_d  0.005188543 -0.001102120  0.069548081 -0.075171182  1.000000000
 
 corrplot(correlation_matrix, method = "color", type = "upper", 
          order = "hclust", tl.col = "black", tl.srt = 45,
@@ -2387,18 +2515,6 @@ steps3$crosses_minor <- as.factor(steps3$crosses_minor)
 steps3$crosses_local <- as.factor(steps3$crosses_local)
 steps3$time_category <- as.factor(steps3$time_category)
 steps3$season <- as.factor(steps3$season)
-
-vars_of_interest <- steps3[, c("landuse_factor", "major_d", "minor_d", "local_d", 
-                               "time_category", "season", 
-                               "crosses_major", "crosses_minor", "crosses_local")]
-
-
-het_cor <- hetcor(vars_of_interest)
-het_cor$correlations
-corrplot(het_cor$correlations, method = "color", 
-         type = "upper", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
-
 
 
 # ---- distributions? ---------
@@ -2851,14 +2967,11 @@ calculate_crossing_ratio <- function(data, road_type = "state") {
   return(result)
 }
 
-# 2. Apply to different road types
 state_ratio <- calculate_crossing_ratio(steps3, "state")
 local_ratio <- calculate_crossing_ratio(steps3, "local")
-
-# 3. Combine results
 crossing_ratios <- rbind(state_ratio, local_ratio)
 
-# Function to calculate crossing ratios by category
+# calculate crossing ratios by category
 calculate_crossing_ratio_by_category <- function(data, road_type = "state", category_var = "time_category") {
   # Determine which crossing variable to use
   crossing_var <- paste0("crosses_", road_type)
@@ -2921,15 +3034,23 @@ calculate_crossing_ratio_by_category <- function(data, road_type = "state", cate
   return(results)
 }
 
-# Calculate crossing ratios by time of day for each road type
+#crossing ratios by time of day
 time_state_ratios <- calculate_crossing_ratio_by_category(steps3, "state", "time_category")
 time_local_ratios <- calculate_crossing_ratio_by_category(steps3, "local", "time_category")
+time_combined <- rbind(
+  time_state_ratios %>% mutate(road_group = "State Roads"),
+  time_local_ratios %>% mutate(road_group = "Local Roads")
+)
 
-# Calculate crossing ratios by season for each road type
+#crossing ratios by season
 season_state_ratios <- calculate_crossing_ratio_by_category(steps3, "state", "season")
 season_local_ratios <- calculate_crossing_ratio_by_category(steps3, "local", "season")
+season_combined <- rbind(
+  season_state_ratios %>% mutate(road_group = "State Roads"),
+  season_local_ratios %>% mutate(road_group = "Local Roads")
+)
 
-# 1. Basic crossing ratio plot for road types
+#  crossing ratio plot for road types
 ggplot(crossing_ratios, aes(x = road_type, y = log(ratio), fill = road_type)) +
   geom_bar(stat = "identity", width = 0.6) +
   geom_errorbar(aes(ymin = log(ci_lower), ymax = log(ci_upper)), width = 0.2) +
@@ -2945,58 +3066,12 @@ ggplot(crossing_ratios, aes(x = road_type, y = log(ratio), fill = road_type)) +
   theme(plot.title=element_text( hjust=0.5, vjust=0.5),
         text = element_text(family = "Times"))
 
-# 2. Crossing ratio by time of day
-time_combined <- rbind(
-  time_state_ratios %>% mutate(road_group = "State Roads"),
-  time_local_ratios %>% mutate(road_group = "Local Roads")
-)
-
-ggplot(time_combined, aes(x = category, y = log(ratio), fill = road_group)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = log(ci_lower), ymax = log(ci_upper)), 
-                position = position_dodge(width = 0.7), width = 0.2) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(x = "Season", y = "Log Ratio (Used:Available)",
-       title = "Road crossing avoidance by season",
-       fill = "") +
-  scale_fill_manual(
-    values = c("#C4A484", "#E6550D"),
-    labels = c("Local", "State")
-  ) +
-    theme_minimal() +
-  theme(plot.title=element_text( hjust=0.5, vjust=0.5),
-        text = element_text(family = "Times"))
 
 
-# 3. Crossing ratio by season
-season_combined <- rbind(
-  season_state_ratios %>% mutate(road_group = "State Roads"),
-  season_local_ratios %>% mutate(road_group = "Local Roads")
-)
+# plotting in one plot together
 
-ggplot(season_combined, aes(x = category, y = log(ratio), fill = road_group)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = log(ci_lower), ymax = log(ci_upper)), 
-                position = position_dodge(width = 0.7), width = 0.2) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(x = "Season", y = "Log ratio (used:available)",
-       title = "Road crossing avoidance by season",
-       fill = "") +
-  scale_fill_manual(
-    values = c("#C4A484", "#E6550D"),
-    labels = c("Local", "State")
-  ) +
-    theme_minimal() +
-  theme(plot.title=element_text( hjust=0.5, vjust=0.5),
-        text = element_text(family = "Times"))
-
-
-# First, let's combine the data frames
-# Add a category_type column to distinguish between time and season data
 time_combined$category_type <- "Time of day"
 season_combined$category_type <- "Season"
-
-# Combine the data frames
 all_crossing_data <- rbind(time_combined, season_combined)
 
 # Create a faceted plot
