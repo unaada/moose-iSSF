@@ -190,8 +190,6 @@ corine <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\rasters\\corine
 
 slope <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\rasters\\slope_30m_degrees.tif")
 
-study_area <- readRDS("study_area.rds")
-
 #### 1. landuse
 # reclassify matrix to group landuse categories
 m <- matrix(c(0,22,1,
@@ -239,6 +237,7 @@ local_roads_dist <- roads[roads$kal <= 100 | roads$class == 0,] %>%
   rasterize(landuse) %>%
   distance() %>% 
   crop(study_area) %>% 
+  mask(study_area) %>% 
   setNames("local_d")
 
 state_roads_dist <- roads[roads$kal > 100,] %>%
@@ -318,7 +317,7 @@ slope <- slope %>%
 
 ```{r all moose}
 
-# # remove for each moose if burst < 3
+# remove for each moose if burst < 3
 # dat3 <- dat2 %>%
 #   mutate(dat.filtered = map(dat.resample, ~ filter_min_n_burst(., min_n = 3)))
 # # try to retain the filtered AND the id columns
@@ -329,7 +328,7 @@ slope <- slope %>%
 # burst_id_map <- as.data.frame(all_moose) %>%
 #   dplyr::select(id, burst_) %>%
 #   distinct()
-# 
+
 # saveRDS(burst_id_map, "burst_id_map.rds")
 
 # --------------------------------------- DO NOT TOUCH OR RUN THIS --------------------------
@@ -352,16 +351,17 @@ slope <- slope %>%
 
 # ----------------------------------------------------------------- start working only from HERE --------------
 
-
+# 
 # steps <- readRDS("steps_data_fixed.rds")
 # 
-# 
+
 # # try to join back the moose id to have for glmmm as random effect
 # steps <- steps %>%
 #   left_join(burst_id_map, by = "burst_", relationship = "many-to-one", multiple = "first")
 
-steps <- readRDS("steps_data_fixed_with_burst.rds")
+# saveRDS(steps, "steps_data_fixed_with_burst.rds")
 
+steps <- readRDS("steps_data_fixed_with_burst.rds")
 
 # get the covariates for each step
 steps2 <- steps %>% 
@@ -412,9 +412,9 @@ steps3 <- steps2 %>%
     
     # assign season category
     season = case_when(
-      (date >= as.Date("2018-11-23") & date <= as.Date("2019-04-06")) ~ "Winter",
-      (date >= as.Date("2019-04-07") & date <= as.Date("2019-05-31")) ~ "Spring",
-      (date >= as.Date("2019-06-01") & date <= as.Date("2019-09-02")) ~ "Summer"
+      month %in% c("Nov","Dec", "Jan", "Feb","Mar") ~ "Winter", #winter
+      month %in% c( "Apr", "May") ~ "Spring", #spring
+      month %in% c("Jun", "Jul", "Aug", "Sep") ~ "Summer" #summer
     ),
     
     # insert state road distances (major + minor class) 
@@ -451,7 +451,7 @@ steps3$landuse_factor <- factor(steps3$landuse_total,
 
 # change reference category
 steps3$time_category <- factor(steps3$time_category) %>% relevel(ref = "Day")
-steps3$season <- factor(steps3$season) %>% relevel(ref = "Winter")
+steps3$season <- factor(steps3$season) %>% relevel(ref = "Summer")
 
 # create an original (before scaling) variable
 steps3_original <- steps3
@@ -1463,42 +1463,88 @@ extract_summary_table_data <- function(results_list) {
   
   return(all_models_data)
 }
-# 
-# # Run all models once and store results
-# all_model_results <- list()
-# 
-# # Run basic model
-# cat("\n======= RUNNING BASIC MODEL =======\n")
-# all_model_results[["basic"]] <- run_stepwise_aic_selection(steps3, model_type = "basic")
-# 
-# # Run time model
-# cat("\n======= RUNNING TIME MODEL =======\n")
-# all_model_results[["time"]] <- run_stepwise_aic_selection(steps3, model_type = "time")
-# 
-# # Run state interaction model
-# cat("\n======= RUNNING STATE INTERACTION MODEL =======\n")
-# all_model_results[["state_interaction"]] <- run_stepwise_aic_selection(steps3, model_type = "state_interaction")
-# 
-# # Run local interaction model
-# cat("\n======= RUNNING LOCAL INTERACTION MODEL =======\n")
-# all_model_results[["local_interaction"]] <- run_stepwise_aic_selection(steps3, model_type = "local_interaction")
-# 
+
+# Run all models once and store results
+all_model_results <- list()
+
+# Run basic model
+cat("\n======= RUNNING BASIC MODEL =======\n")
+all_model_results[["basic"]] <- run_stepwise_aic_selection(steps3, model_type = "basic")
+
+# Run time model
+cat("\n======= RUNNING TIME MODEL =======\n")
+all_model_results[["time"]] <- run_stepwise_aic_selection(steps3, model_type = "time")
+
+# Run state interaction model
+cat("\n======= RUNNING STATE INTERACTION MODEL =======\n")
+all_model_results[["state_interaction"]] <- run_stepwise_aic_selection(steps3, model_type = "state_interaction")
+
+# Run local interaction model
+cat("\n======= RUNNING LOCAL INTERACTION MODEL =======\n")
+all_model_results[["local_interaction"]] <- run_stepwise_aic_selection(steps3, model_type = "local_interaction")
+
 # Just run the season model and add it to your existing results
 cat("\n======= RUNNING SEASON MODEL =======\n")
-all_model_results_season[["season"]] <- run_stepwise_aic_selection(steps3, model_type = "season")
+all_model_results[["season"]] <- run_stepwise_aic_selection(steps3, model_type = "season")
+
+# Save the updated results
+saveRDS(all_model_results, "saved_models/all_model_results_with_season.rds")
+
 # 
-# # Save the updated results
-saveRDS(all_model_results_season, "saved_models/all_model_results_with_season.rds")
-
-
+# # Extract data for summary table
+# summary_table_data <- extract_summary_table_data(all_model_results)
+# 
+# # Print summary table
+# print(summary_table_data)
+# 
+# # Save summary table to CSV
+# write.csv(summary_table_data, "model_summary_table.csv", row.names = FALSE)
+# 
+# # Function to generate formatted table like the one in the image
+# create_formatted_table <- function(summary_data) {
+#   # Identify common fixed effects columns
+#   effect_cols <- grep("_est$", names(summary_data), value = TRUE)
+#   
+#   # Create a nicer formatted table
+#   library(knitr)
+#   library(kableExtra)
+#   
+#   # Select relevant columns and rename them
+#   table_data <- summary_data[, c("model_name", "AIC", "delta_AIC", "weight", "df", "logLik")]
+#   
+#   # Rank models
+#   table_data$Rank <- rank(table_data$AIC)
+#   
+#   # Add parameter estimates from fixed effects
+#   for (col in effect_cols) {
+#     param_name <- sub("_est$", "", col)
+#     table_data[[param_name]] <- summary_data[[col]]
+#   }
+#   
+#   # Add random effects
+#   table_data$random_str_ID <- summary_data$rand_str_ID
+#   table_data$random_id <- summary_data$rand_id
+#   
+#   # Reorder columns
+#   table_data <- table_data[, c("Rank", "model_name", effect_cols, 
+#                                 "random_str_ID", "random_id", 
+#                                 "df", "logLik", "AIC", "delta_AIC", "weight")]
+#   
+#   # Format table
+#   formatted_table <- kable(table_data, format = "html", digits = 4,
+#                           caption = "Model selection table: Models ranked by AIC") %>%
+#     kable_styling(bootstrap_options = c("striped", "hover"))
+#   
+#   return(formatted_table)
+# }
+# 
+# # Generate formatted table
+# formatted_table <- create_formatted_table(summary_table_data)
 ```
 
 
 
 ```{r table AICc}
-
-all_model_results <- readRDS("saved_models/all_model_results.rds")
-all_model_results_season <- readRDS("saved_models/all_model_results_with_season.rds")$season
 
 # Function to recalculate AICs and weights for existing all_model_results
 recalculate_model_metrics <- function(all_model_results) {
@@ -1601,9 +1647,7 @@ recalculate_model_metrics <- function(all_model_results) {
 }
 
 # Call the function on your existing results
-updated_model_tables <- recalculate_model_metrics(all_model_results_season["season"])
-
-write.csv(updated_model_tables, "updated_model_progression_new_season.csv", row.names = FALSE)
+updated_model_tables <- recalculate_model_metrics(all_model_results)
 
 # Print and save updated tables
 for (model_name in names(updated_model_tables)) {
@@ -1611,11 +1655,9 @@ for (model_name in names(updated_model_tables)) {
   print(updated_model_tables[[model_name]])
   
   # Save to CSV
-  file_name <- paste0("updated_model_progression_new_", model_name, ".csv")
+  file_name <- paste0("updated_model_progression_", model_name, ".csv")
   write.csv(updated_model_tables[[model_name]], file_name, row.names = FALSE)
 }
-
-
 
 
 ```
@@ -1630,6 +1672,7 @@ for (model_name in names(updated_model_tables)) {
 
 #------------------------------------------------------------------season -------------------------------------
 
+steps3$season <- steps3$season %>% relevel(ref = "Winter")
 
 
 TMBStruc2.0 <- glmmTMB(
@@ -2654,16 +2697,14 @@ corrplot(correlation_matrix, method = "color", type = "upper",
 
 
 
-summary(aov(s_state_d ~ landuse_factor, data = steps3))
-summary(aov(s_local_d ~ landuse_factor, data = steps3))
-summary(aov(s_sl_ ~ landuse_factor, data = steps3))
+library(polycor)
 
-ggplot(steps3, aes(x = landuse_factor, y = s_state_d)) +
-  geom_boxplot() +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Distance to state road by land use type")
 
+steps3$crosses_major <- as.factor(steps3$crosses_major)
+steps3$crosses_minor <- as.factor(steps3$crosses_minor)
+steps3$crosses_local <- as.factor(steps3$crosses_local)
+steps3$time_category <- as.factor(steps3$time_category)
+steps3$season <- as.factor(steps3$season)
 
 
 # ---- distributions? ---------
@@ -2769,24 +2810,6 @@ crossing_counts_local_rnd <- table(
 #   Day        1687   1102    455
 #   Night      1268    881   2838
 #   Twilight    456    212    339
-
-
-lm_model <- glm(
-  num_case_ ~ s_sl_ + 
-    s_state_d + s_local_d + 
-    landuse_factor +
-    time_category:s_state_d + time_category:s_local_d,
-  family = poisson,
-  data = steps3
-)
-
-# Calculate VIFs
-vif_values <- vif(lm_model)
-print(vif_values)
-
-# For interaction terms, you can use:
-vif_values_interactions <- vif(lm_model, type = "terms")
-print(vif_values_interactions)
 
 ```
 
@@ -3386,6 +3409,85 @@ ggsave("crossing_ratio.png", height = 6, width = 8,  bg = "white", device = png)
 
 
 
+```{r crossing model visualisation}
+
+# Calculate RSS values for each landuse type and crossing status
+landuse_levels <- levels(steps3$landuse_factor)
+
+# Create a data frame to store results
+rss_data <- data.frame(
+  landuse = rep(landuse_levels, each = 2),
+  crossing = rep(c("No", "Yes"), times = length(landuse_levels)),
+  stringsAsFactors = FALSE
+)
+
+# Get coefficients from the model
+coefs <- fixef(model_glmm_local)$cond
+
+# Calculate linear predictor for each combination
+rss_data$linear_pred <- 0  # Initialize
+
+for (i in 1:nrow(rss_data)) {
+  land <- rss_data$landuse[i]
+  cross <- rss_data$crossing[i] == "Yes"
+  
+  # Start with intercept
+  pred <- coefs["(Intercept)"]
+  
+  # Add landuse effect if not reference level (Coniferous)
+  if (land != "Coniferous") {
+    pred <- pred + coefs[paste0("landuse_factor", land)]
+  }
+  
+  # Add crossing effect and interaction if crossing=Yes
+  if (cross) {
+    pred <- pred + coefs["crosses_localTRUE"]
+    
+    # Add interaction if not reference level
+    if (land != "Coniferous") {
+      interaction_term <- paste0("crosses_localTRUE:landuse_factor", land)
+      if (interaction_term %in% names(coefs)) {
+        pred <- pred + coefs[interaction_term]
+      }
+    }
+  }
+  
+  rss_data$linear_pred[i] <- pred
+}
+
+# Convert to RSS (relative to no crossing in coniferous)
+reference_value <- rss_data$linear_pred[rss_data$landuse == "Coniferous" & 
+                                      rss_data$crossing == "No"]
+rss_data$rss <- exp(rss_data$linear_pred - reference_value)
+
+# Add jitter for visualization
+set.seed(123)
+rss_data$x_jitter <- as.numeric(factor(rss_data$crossing)) + 
+                   runif(nrow(rss_data), -0.1, 0.1)
+rss_data$y_jitter <- rss_data$rss + runif(nrow(rss_data), -0.02, 0.02)
+
+
+ggplot(rss_data, aes(x = x_jitter, y = y_jitter, shape = landuse, color = landuse)) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = c(1, 2), labels = c("No", "Yes"), 
+                    name = "# of crossings") +
+  scale_y_continuous(name = "Relative Selection Strength") +
+  ggtitle("Relative Selection Strength by Landuse Type and Local Road Crossing") +
+  theme_minimal() +
+  theme(
+    legend.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", size = 12)
+  )
+
+
+
+
+```
+
+
+
+
 ```{r CI probabilities}
 
 # Simplified visualization code for moose habitat selection models
@@ -3749,86 +3851,60 @@ plot_landuse_facet <- function(predictions, road_var = "state_d") {
 }
 
 # Example usage for each model type:
-# 
-# 
-# # 1. Time of Day effect
-# state_time_preds <- calculate_time_ci(model_glmm3_3.0.2, steps3, "s_state_d")
-# state_time_plot <- plot_time_facet(state_time_preds, "state")
-# print(state_time_plot)
-# 
-# ggsave("state_tine_probability.png", width = 10, height = 5, bg = "white", device = png)
-# 
-# local_time_preds <- calculate_time_ci(model_glmm3_3.0.2, steps3, "s_local_d")
-# local_time_plot <- plot_time_facet(local_time_preds, "local")
-# print(local_time_plot)
-# 
-# ggsave("local_tine_probability.png", width = 10, height = 5, bg = "white", device = png)
-# 
-# # 2. Seasonal effect
-# # state_season_preds <- calculate_season_ci(model_glmm2.2, steps3, "s_state_d")
-# # state_season_plot <- plot_season_facet(state_season_preds, "state_d")
-# # print(state_season_plot)
-# # 
-# ggsave("state_season_probability.png", width = 10, height = 5, bg = "white", device = png)
-# 
-local_season_preds <- calculate_season_ci(model_glmm2.3, steps3, "s_local_d")
-local_season_plot <- plot_season_facet(local_season_preds, "local_d")
-print(local_season_plot)
-# 
-# ggsave("local_season_probability.png", width = 10, height = 5, bg = "white", device = png)
-# 
-# # 3. Landuse interaction
-# state_landuse_preds <- calculate_landuse_ci(model_glmm_state.2, steps3, "s_state_d")
-# state_landuse_plot <- plot_landuse_facet(state_landuse_preds, "state_d")
-# print(state_landuse_plot)
-# 
-# ggsave("state_landsue_probability.png", width = 10, height = 6, bg = "white", device = png)
-# 
-# local_landuse_preds <- calculate_landuse_ci(model_glmm_local.2, steps3, "s_local_d")
-# local_landuse_plot <- plot_landuse_facet(local_landuse_preds, "local_d")
-# print(local_landuse_plot)
-# 
-# ggsave("local_landuse_probability.png", width = 10, height = 5, bg = "white", device = png)
-# 
-# # 4. Basic road effect
-# state_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "s_state_d")
-# state_basic_plot <- plot_basic(state_basic_preds, "state_d")
-# print(state_basic_plot)
-# 
-# ggsave("state_basic_probability.png", width = 6, height = 4, bg = "white", device = png)
-# 
-# 
-# local_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "s_local_d")
-# local_basic_plot <- plot_basic(local_basic_preds, "local_d")
-# print(local_basic_plot)
-# 
-# ggsave("local_basic_probability.png", width = 6, height = 4, bg = "white", device = png)
-
-# ------------ new full models ------------
 
 
-basic_model <- all_model_results$basic$final_model
-
-state_basic_preds <- calculate_basic_ci(basic_model, steps3, "s_state_d")
-state_basic_plot <- plot_basic(state_basic_preds, "s_state_d")
-print(state_basic_plot)
-
-time_model <- all_model_results$time$final_model
-
-state_time_preds <- calculate_time_ci(time_model, steps3, "s_state_d")
-state_time_plot <- plot_time_facet(state_time_preds, "s_state")
+# 1. Time of Day effect
+state_time_preds <- calculate_time_ci(model_glmm3_3.0.2, steps3, "s_state_d")
+state_time_plot <- plot_time_facet(state_time_preds, "state")
 print(state_time_plot)
 
-local_time_preds <- calculate_time_ci(time_model, steps3, "s_local_d")
+ggsave("state_tine_probability.png", width = 10, height = 5, bg = "white", device = png)
+
+local_time_preds <- calculate_time_ci(model_glmm3_3.0.2, steps3, "s_local_d")
 local_time_plot <- plot_time_facet(local_time_preds, "local")
 print(local_time_plot)
 
-season_model <- all_model_results_season$final_model
+ggsave("local_tine_probability.png", width = 10, height = 5, bg = "white", device = png)
 
-local_season_preds <- calculate_season_ci(season_model, steps3, "s_local_d")
+# 2. Seasonal effect
+# state_season_preds <- calculate_season_ci(model_glmm2.2, steps3, "s_state_d")
+# state_season_plot <- plot_season_facet(state_season_preds, "state_d")
+# print(state_season_plot)
+# 
+ggsave("state_season_probability.png", width = 10, height = 5, bg = "white", device = png)
+
+local_season_preds <- calculate_season_ci(model_glmm2.3, steps3, "s_local_d")
 local_season_plot <- plot_season_facet(local_season_preds, "local_d")
 print(local_season_plot)
 
+ggsave("local_season_probability.png", width = 10, height = 5, bg = "white", device = png)
+
+# 3. Landuse interaction
+state_landuse_preds <- calculate_landuse_ci(model_glmm_state.2, steps3, "s_state_d")
+state_landuse_plot <- plot_landuse_facet(state_landuse_preds, "state_d")
+print(state_landuse_plot)
+
+ggsave("state_landsue_probability.png", width = 10, height = 6, bg = "white", device = png)
+
+local_landuse_preds <- calculate_landuse_ci(model_glmm_local.2, steps3, "s_local_d")
+local_landuse_plot <- plot_landuse_facet(local_landuse_preds, "local_d")
+print(local_landuse_plot)
+
+ggsave("local_landuse_probability.png", width = 10, height = 5, bg = "white", device = png)
+
+# 4. Basic road effect
+state_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "s_state_d")
+state_basic_plot <- plot_basic(state_basic_preds, "state_d")
+print(state_basic_plot)
+
+ggsave("state_basic_probability.png", width = 6, height = 4, bg = "white", device = png)
+
+
+local_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "s_local_d")
+local_basic_plot <- plot_basic(local_basic_preds, "local_d")
+print(local_basic_plot)
+
+ggsave("local_basic_probability.png", width = 6, height = 4, bg = "white", device = png)
 
 
 ```
@@ -3956,151 +4032,6 @@ calculate_exact_rss(model_glmm_state.2, steps3, "s_state_d", 2000, landuse = "Mi
 
 calculate_exact_rss(model_glmm_local.2, steps3, "s_local_d", 500, landuse = "Mixed")
 
-
-```
-```{r find barrier effect distance}
-find_preference_threshold_distance <- function(model, data, road_var, season = NULL, 
-                                              time_category = NULL, landuse = NULL, 
-                                              max_search_dist = 2000) {
-  # Get scaling parameters
-  var_center <- attr(data[[road_var]], "scaled:center")
-  var_scale <- attr(data[[road_var]], "scaled:scale")
-  
-  # Extract coefficients
-  coefs <- fixef(model)$cond
-  
-  # Function to calculate probability at a given distance
-  calculate_prob <- function(dist) {
-    scaled_dist <- (dist - var_center) / var_scale
-    
-    # Base effect
-    effect <- coefs[road_var]
-    
-    # Add season interaction if specified
-    if (!is.null(season) && season != "Winter") {
-      interaction_name <- paste0(road_var, ":season", season)
-      if (interaction_name %in% names(coefs)) {
-        effect <- effect + coefs[interaction_name]
-      }
-    }
-    
-    # Add time of day interaction if specified
-    if (!is.null(time_category) && time_category != "Day") {
-      interaction_name <- paste0(road_var, ":time_category", time_category)
-      if (interaction_name %in% names(coefs)) {
-        effect <- effect + coefs[interaction_name]
-      }
-    }
-    
-    # Add landuse interaction if specified
-    if (!is.null(landuse) && landuse != "Coniferous") {
-      interaction_name <- paste0(road_var, ":landuse_factor", landuse)
-      if (interaction_name %in% names(coefs)) {
-        effect <- effect + coefs[interaction_name]
-      }
-    }
-    
-    # Calculate linear predictor, RSS and probability
-    linear_pred <- scaled_dist * effect
-    rss <- exp(linear_pred)
-    prob <- rss / (rss + 10)
-    
-    return(prob - 1/11) # Return difference from threshold for root-finding
-  }
-  
-  # Use root-finding to locate the distance where probability = 1/11
-  result <- try(uniroot(calculate_prob, c(0, max_search_dist)))
-  
-  if (class(result) == "try-error") {
-    # Check if we're always above or below threshold
-    if (calculate_prob(0) > 0 && calculate_prob(max_search_dist) > 0) {
-      return("Always preferred")
-    } else if (calculate_prob(0) < 0 && calculate_prob(max_search_dist) < 0) {
-      return("Always avoided")
-    } else {
-      return(NA)
-    }
-  } else {
-    return(result$root)
-  }
-}
-
-night_threshold <- find_preference_threshold_distance(
-  all_model_results$basic$final_model, steps3, "s_local_d"
-)
-night_threshold
-
-
-
-
-# For basic model
-basic_effect <- fixef(all_model_results$basic$final_model)$cond["s_local_d"]
-print(basic_effect)  # Should be 0.07625
-
-# For time model with Night
-time_model_coefs <- fixef(all_model_results$time$final_model)$cond
-day_effect <- time_model_coefs["s_local_d"]  # Should be 0.16135
-day_effect
-night_interaction <- time_model_coefs["s_local_d:time_categoryNight"]  # Should be -0.22516
-night_interaction
-night_effect <- day_effect + night_interaction  # Should be -0.06381
-print(night_effect)
-
-
-
-
-
-
-
-
-
-
-
-
-# Simplified version for debugging
-debug_preference_threshold <- function(model, variable, time_cat = NULL) {
-  coefs <- fixef(model)$cond
-  
-  # Base effect
-  effect <- coefs[variable]
-  
-  # Add time interaction if specified
-  if (!is.null(time_cat) && time_cat != "Day") {
-    interaction_name <- paste0(variable, ":time_category", time_cat)
-    if (interaction_name %in% names(coefs)) {
-      effect <- effect + coefs[interaction_name]
-      print(paste("Adding interaction:", interaction_name, "=", coefs[interaction_name]))
-    }
-  }
-  
-  print(paste("Final effect coefficient:", effect))
-  
-  # Just to illustrate threshold calculation
-  var_center <- attr(steps3[[variable]], "scaled:center")
-  var_scale <- attr(steps3[[variable]], "scaled:scale")
-  
-  # Function that would be used in uniroot
-  calculate_prob <- function(dist) {
-    scaled_dist <- (dist - var_center) / var_scale
-    linear_pred <- scaled_dist * effect
-    rss <- exp(linear_pred)
-    prob <- rss / (rss + 10)
-    return(prob - 1/11)
-  }
-  
-  # Test a few distances
-  for (d in c(0, 200, 400, 600, 800, 1000)) {
-    print(paste("Distance:", d, "Prob diff from threshold:", calculate_prob(d)))
-  }
-}
-
-# Test basic model
-print("BASIC MODEL")
-debug_preference_threshold(all_model_results$basic$final_model, "s_local_d")
-
-# Test time model with Night
-print("TIME MODEL - NIGHT")
-debug_preference_threshold(all_model_results$time$final_model, "s_local_d", "Night")
 
 ```
 

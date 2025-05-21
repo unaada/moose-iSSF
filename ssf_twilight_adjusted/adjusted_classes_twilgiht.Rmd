@@ -1,0 +1,687 @@
+---
+title: "ssf_adjusted_twilight"
+author: "Una Adamoviča"
+date: "2025-04-05"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(suncalc)
+library(chron)
+
+library(sf)
+library(terra)
+library(tidyverse)
+library(lubridate)
+library(corrplot)
+
+library(amt)
+library(glmmTMB)
+
+```
+
+
+
+
+```{r collecting covariates}
+#layers
+study_area <- readRDS("study_area.rds")
+
+new_forest <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_data\\Hansen_GFC-2022-v1.10_lossyear_60N_020E.tif")
+
+roads <- st_read("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\full-road-classes.gpkg")
+
+corine <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\rasters\\corine_30m_resample_mode.tif")
+
+slope <- rast("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\rasters\\slope_30m_degrees.tif")
+
+#### 1. landuse
+# reclassify matrix to group landuse categories
+m <- matrix(c(0,22,1,
+              22,23, 2,
+              23, 24, 3,
+              24, 25, 4,
+              25, 41, 5), ncol = 3, byrow = TRUE)
+
+# 1 = human-modified = agriculture and anthropogenic
+# 2 = broad-leaved (deciduous)
+# 3 = coniferous
+# 4 = mixed
+# 5 = open areas -> combine with srub and peatbog and water
+# lowest excluded, maximum included
+
+landuse <- terra::classify(corine, m) %>%
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("landuse")
+
+#### 2. roads + distance
+# distance to roads code
+  # mutate(
+  #   nearest_major = st_distance(geometry,st_union(roads[roads$class>= 2, ])),
+  #   nearest_minor = st_distance(geometry, st_union(roads[roads$class== 1, ])),
+  #   nearest_local = st_distance(geometry, st_union(roads[roads$class == 0, ]))
+  # )
+
+major_roads_dist <- roads[roads$class ==3,] %>%
+  rasterize(landuse) %>%
+  distance() %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("major_d")
+
+minor_roads_dist <- roads[roads$kal > 100 & roads$kal < 4500,] %>%
+  rasterize(landuse) %>%
+  distance() %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("minor_d")
+
+local_roads_dist <- roads[roads$kal <= 100 | roads$class == 0,] %>%
+  rasterize(landuse) %>%
+  distance() %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("local_d")
+
+
+#### 3. new forest (forest loss)
+# reproject the layer, align the grids, and assign binary values to have new forest y/n
+new_forest <- new_forest %>% 
+  project(landuse) %>% 
+  resample(landuse, method = "near") %>% 
+  classify(matrix(c(3, 16, 1,
+                    16, 22, 0), ncol = 3, byrow = TRUE)) %>% 
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("new_forest")
+
+# where new forest is 
+mask_new_forest <- new_forest == 1
+
+landuse_in_newforest <- mask(landuse, mask_new_forest)
+
+freq_table <- terra::freq(landuse_in_newforest)
+total_pixels <- sum(freq_table$count, na.rm = TRUE)
+freq_table$percentage <- (freq_table$count / total_pixels) * 100
+
+# > freq_table
+#   layer value  count percentage
+# 1     1     1 123684  24.021255
+# 2     1     2  11752   2.282412
+# 3     1     3 126907  24.647209
+# 4     1     4 130521  25.349101
+# 5     1     5 122030  23.700024
+
+# where forest is in landuse
+forest_types <- landuse %in% c(2, 3, 4, 5)
+forest_to_override <- forest_types & mask_new_forest
+
+landuse_total <- landuse %>% 
+  setNames("landuse_total")
+landuse_total[forest_to_override] <- 6
+
+freq_before <- terra::freq(landuse)
+freq_after <- terra::freq(landuse_total)
+print(data.frame(
+  Category = c("Human-modified", "Deciduous", "Coniferous", "Mixed", "Open/shrub/bog", "New forest"),
+  Before = c(freq_before$count, 0),  # Add 0 for the new category that didn't exist before
+  After = freq_after$count
+))
+
+#### 4. slope
+
+slope <- slope %>%
+  crop(study_area) %>% 
+  mask(study_area) %>% 
+  setNames("slope")
+
+
+
+```
+
+```{r}
+
+# steps2 <- readRDS("steps2.rds")
+burst_id_map <- readRDS("burst_id_map.rds")
+steps <- readRDS("steps_data_fixed.rds")
+
+# try to join back the moose id to have for glmmm as random effect
+steps <- steps %>%
+  left_join(burst_id_map, by = "burst_", relationship = "many-to-one", multiple = "first")
+
+# get the covariates for each step
+steps2 <- steps %>% 
+  extract_covariates(landuse_total) %>% 
+  extract_covariates(major_roads_dist) %>%
+  extract_covariates(minor_roads_dist) %>%
+  extract_covariates(local_roads_dist) %>% 
+  extract_covariates(slope)
+
+
+#  time categories
+steps2 <- steps2 %>%
+  mutate(
+    time_of_day = chron(times = format(t1_, format = "%H:%M:%S")),
+    date = as.Date(t1_, format = "%Y/%m/%d")
+  ) 
+
+
+# get time of day times to assign time categories
+sunlight <- getSunlightTimes(
+  date = steps2$date,
+  lon = 25.45, 
+  lat = 59.05, 
+  keep = c("sunriseEnd", "sunsetStart", "nauticalDawn", "nauticalDusk"),
+  tz = "Europe/Tallinn"
+)
+
+steps3 <- steps2 %>%
+  # join to get the time of sunglight for each observation
+  left_join(sunlight, by = "date", relationship = "many-to-many", multiple = "first") %>%
+  
+  # assign time category for each observation based on sunlight availability
+  mutate(
+    sunrise = chron(times = format(sunriseEnd, format = "%H:%M:%S")),
+    sunset = chron(times = format(sunsetStart, format = "%H:%M:%S")),
+    dawn = chron(times = format(nauticalDawn, format = "%H:%M:%S")),
+    dusk = chron(times = format(nauticalDusk, format = "%H:%M:%S")),
+    
+    time_category = case_when(
+      time_of_day >= sunrise & time_of_day < sunset ~ "Day", # day
+      (time_of_day >= dawn & time_of_day < sunrise) | 
+        (time_of_day >= sunset & time_of_day < dusk) ~ "Twilight", # twilight
+      TRUE ~ "Night"), #night
+    
+    month = lubridate::month(t1_, label = TRUE),
+    
+    # assign season category
+    season = case_when(
+      month %in% c("Nov","Dec", "Jan", "Feb","Mar") ~ "Winter", #winter
+      month %in% c( "Apr", "May") ~ "Spring", #spring
+      month %in% c("Jun", "Jul", "Aug", "Sep") ~ "Summer" #summer
+    ),
+    
+    # insert state road distances (major + minor class) 
+    state_d = pmin(minor_d, major_d, na.rm = TRUE)
+
+  ) %>%
+  
+  # remove some unnecessary attributes
+  dplyr::select(-sunrise, -sunset, -dawn, -dusk, -lon, -lat)
+
+
+# steffanie suggestion how to structure data for injection
+d.map <- data.frame(step_id_=unique(steps3$step_id_), 
+                    str_ID=1:length(unique(steps3$step_id_)))
+
+# put new sequential stratum ID
+steps3$str_ID <- d.map[match(steps3$step_id_, d.map$step_id_), "str_ID"]
+
+# ordering data by stratum id
+steps3 <- steps3[order(steps3$str_ID),]
+
+# give meaningful names and give reference category
+steps3$landuse_factor <- factor(steps3$landuse_total,
+                                labels = c("Human-modified", "Deciduous",
+                                           "Coniferous", "Mixed", "Open/shrub/bog", "New forest")) %>% 
+  relevel(ref = "Coniferous")
+
+# 1 = human-modified = agriculture and anthropogenic
+# 2 = broad-leaved (deciduous)
+# 3 = coniferous
+# 4 = mixed
+# 5 = open areas -> combine with shrub and peatbog and water
+# 6 = new forest 
+
+# change reference category
+steps3$time_category <- factor(steps3$time_category) %>% relevel(ref = "Day")
+steps3$season <- factor(steps3$season) %>% relevel(ref = "Summer")
+
+# create an original (before scaling) variable
+steps3_original <- steps3
+
+steps3$s_sl_ <- scale(steps3$sl_)
+steps3$s_ta_ <- scale(cos(steps3$ta_))
+steps3$s_minor_d <- scale(steps3$minor_d)
+steps3$s_major_d <- scale(steps3$major_d)
+steps3$s_local_d <- scale(steps3$local_d)
+steps3$s_state_d <- scale(steps3$state_d)
+steps3$s_slope <- scale(steps3$slope)
+
+steps3$num_case_ <- as.numeric(steps3$case_)
+
+```
+
+
+
+```{r models}
+
+# ---------------------------------------------------------- time ------------------------------------------
+# TMBStruc3 <- glmmTMB(
+#   num_case_ ~ s_sl_ + s_ta_ + s_slope +
+#     s_minor_d + s_major_d + s_local_d + 
+#     landuse_factor +
+#     time_category:s_minor_d + time_category:s_major_d + time_category:s_local_d +
+#     (1 | str_ID) +   
+#     (1 | id), 
+#   family = poisson,
+#   data = steps3,
+#   doFit = FALSE
+# )
+# 
+# TMBStruc3$parameters$theta[1] = log(1e3)  
+# TMBStruc3$mapArg = list(theta = factor(c(NA, 1)))
+# model_glmm3 <- glmmTMB:::fitTMB(TMBStruc3)
+# summary(model_glmm3)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405742.6  405938.1 -202852.3  405704.6    216956 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.525e-01    0.3905
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                     -3.074446   7.123418  -0.432   0.6660    
+# s_sl_                            0.135385   0.006672  20.291  < 2e-16 ***
+# s_ta_                            0.006642   0.007517   0.884   0.3769    
+# s_slope                         -0.011466   0.009689  -1.183   0.2367    
+# s_minor_d                        0.186124   0.127220   1.463   0.1435    
+# s_major_d                       -0.017365   0.134568  -0.129   0.8973    
+# s_local_d                        0.181464   0.031503   5.760 8.40e-09 ***
+# landuse_factorHuman-modified    -0.312701   0.046284  -6.756 1.42e-11 ***
+# landuse_factorDeciduous          0.265022   0.053675   4.938 7.91e-07 ***
+# landuse_factorMixed              0.064378   0.032771   1.964   0.0495 *  
+# landuse_factorOpen/shrub/bog     0.059902   0.038852   1.542   0.1231    
+# landuse_factorNew forest         0.372495   0.027329  13.630  < 2e-16 ***
+# s_minor_d:time_categoryNight     0.310563   0.197292   1.574   0.1155    
+# s_minor_d:time_categoryTwilight -0.139203   0.238461  -0.584   0.5594    
+# s_major_d:time_categoryNight     0.422220   0.208140   2.029   0.0425 *  
+# s_major_d:time_categoryTwilight  0.151488   0.251592   0.602   0.5471    
+# s_local_d:time_categoryNight    -0.265097   0.050035  -5.298 1.17e-07 ***
+# s_local_d:time_categoryTwilight -0.060421   0.058957  -1.025   0.3054 
+
+# remove minor road interaction
+
+# TMBStruc3.1 <- glmmTMB(
+#   num_case_ ~ s_sl_ + s_ta_ + s_slope +
+#     s_minor_d + s_major_d + s_local_d + 
+#     landuse_factor +
+#     time_category:s_major_d + time_category:s_local_d +
+#     (1 | str_ID) +   
+#     (1 | id), 
+#   family = poisson,
+#   data = steps3,
+#   doFit = FALSE
+# )
+# 
+# TMBStruc3.1$parameters$theta[1] = log(1e3)  
+# TMBStruc3.1$mapArg = list(theta = factor(c(NA, 1)))
+# model_glmm3.1 <- glmmTMB:::fitTMB(TMBStruc3.1)
+# summary(model_glmm3.1)
+
+
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405742.5  405917.4 -202854.3  405708.5    216958 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance Std.Dev. 
+#  str_ID (Intercept) 1.00e+06 1000.0000
+#  id     (Intercept) 1.54e-01    0.3924
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                     -3.078143   7.123446  -0.432  0.66566    
+# s_sl_                            0.135624   0.006671  20.329  < 2e-16 ***
+# s_ta_                            0.006642   0.007517   0.884  0.37691    
+# s_slope                         -0.011546   0.009687  -1.192  0.23330    
+# s_minor_d                        0.264496   0.087849   3.011  0.00261 ** 
+# s_major_d                       -0.035718   0.132850  -0.269  0.78804    
+# s_local_d                        0.182501   0.031483   5.797 6.76e-09 ***
+# landuse_factorHuman-modified    -0.313423   0.046273  -6.773 1.26e-11 ***
+# landuse_factorDeciduous          0.265616   0.053671   4.949 7.46e-07 ***
+# landuse_factorMixed              0.064800   0.032766   1.978  0.04796 *  
+# landuse_factorOpen/shrub/bog     0.059854   0.038849   1.541  0.12340    
+# landuse_factorNew forest         0.372710   0.027326  13.640  < 2e-16 ***
+# s_major_d:time_categoryNight     0.493389   0.203130   2.429  0.01514 *  
+# s_major_d:time_categoryTwilight  0.120129   0.245415   0.489  0.62449    
+# s_local_d:time_categoryNight    -0.267029   0.049997  -5.341 9.25e-08 ***
+# s_local_d:time_categoryTwilight -0.060392   0.058942  -1.025  0.30556    
+
+# remove 
+
+# TMBStruc3.2 <- glmmTMB(
+#   num_case_ ~ s_sl_ + s_ta_ + s_slope +
+#     s_minor_d + s_major_d + s_local_d + 
+#     landuse_factor +
+#     time_category:s_minor_d + time_category:s_major_d + time_category:s_local_d +
+#     (1 | str_ID) +   
+#     (1 | id), 
+#   family = poisson,
+#   data = steps3,
+#   doFit = FALSE
+# )
+# 
+# TMBStruc3.2$parameters$theta[1] = log(1e3)  
+# TMBStruc3.2$mapArg = list(theta = factor(c(NA, 1)))
+# model_glmm3.2 <- glmmTMB:::fitTMB(TMBStruc3.2)
+# summary(model_glmm3.2)
+
+
+# 
+# # remove slope  predictor
+# TMBStruc3_3.0.2 <- glmmTMB(
+#   num_case_ ~ s_sl_ + 
+#     s_state_d + s_local_d + 
+#     landuse_factor +
+#     time_category:s_state_d + time_category:s_local_d +
+#     (1 | str_ID) +   
+#     (1 | id), 
+#   family = poisson,
+#   data = steps3,
+#   doFit = FALSE
+# )
+# 
+# TMBStruc3_3.0.2$parameters$theta[1] = log(1e3)  
+# TMBStruc3_3.0.2$mapArg = list(theta = factor(c(NA, 1)))
+# model_glmm3_3.0.2 <- glmmTMB:::fitTMB(TMBStruc3_3.0.2)
+# summary(model_glmm3_3.0.2)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405742.6  405938.1 -202852.3  405704.6    216956 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.525e-01    0.3905
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                     -3.074446   7.123418  -0.432   0.6660    
+# s_sl_                            0.135385   0.006672  20.291  < 2e-16 ***
+# s_ta_                            0.006642   0.007517   0.884   0.3769    
+# s_slope                         -0.011466   0.009689  -1.183   0.2367    
+# s_minor_d                        0.186124   0.127220   1.463   0.1435    
+# s_major_d                       -0.017365   0.134568  -0.129   0.8973    
+# s_local_d                        0.181464   0.031503   5.760 8.40e-09 ***
+# landuse_factorHuman-modified    -0.312701   0.046284  -6.756 1.42e-11 ***
+# landuse_factorDeciduous          0.265022   0.053675   4.938 7.91e-07 ***
+# landuse_factorMixed              0.064378   0.032771   1.964   0.0495 *  
+# landuse_factorOpen/shrub/bog     0.059902   0.038852   1.542   0.1231    
+# landuse_factorNew forest         0.372495   0.027329  13.630  < 2e-16 ***
+# s_minor_d:time_categoryNight     0.310563   0.197292   1.574   0.1155    
+# s_minor_d:time_categoryTwilight -0.139203   0.238461  -0.584   0.5594    
+# s_major_d:time_categoryNight     0.422220   0.208140   2.029   0.0425 *  
+# s_major_d:time_categoryTwilight  0.151488   0.251592   0.602   0.5471    
+# s_local_d:time_categoryNight    -0.265097   0.050035  -5.298 1.17e-07 ***
+# s_local_d:time_categoryTwilight -0.060421   0.058957  -1.025   0.3054   
+
+
+# ----------- with the new classes --------
+
+# major > 4500 ; minor 26-4500
+
+# TMBStruc_time <- glmmTMB(
+#   num_case_ ~ s_sl_ + s_ta_ + s_slope +
+#     s_minor_d + s_major_d + s_local_d + 
+#     landuse_factor +
+#     time_category:s_minor_d + time_category:s_major_d + time_category:s_local_d +
+#     (1 | str_ID) +   
+#     (1 | id), 
+#   family = poisson,
+#   data = steps3,
+#   doFit = FALSE
+# )
+# 
+# TMBStruc_time$parameters$theta[1] = log(1e3)  
+# TMBStruc_time$mapArg = list(theta = factor(c(NA, 1)))
+# model_glmm_time <- glmmTMB:::fitTMB(TMBStruc_time)
+# summary(model_glmm_time)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405740.7  405936.2 -202851.3  405702.7    216956 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.525e-01    0.3905
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                     -3.075941   7.123433  -0.432   0.6659    
+# s_sl_                            0.135481   0.006676  20.294  < 2e-16 ***
+# s_ta_                            0.006631   0.007517   0.882   0.3777    
+# s_slope                         -0.011836   0.009689  -1.222   0.2219    
+# s_minor_d                        0.251549   0.128929   1.951   0.0510 .  
+# s_major_d                       -0.067080   0.136067  -0.493   0.6220    
+# s_local_d                        0.178903   0.031212   5.732 9.93e-09 ***
+# landuse_factorHuman-modified    -0.311227   0.046291  -6.723 1.78e-11 ***
+# landuse_factorDeciduous          0.264813   0.053665   4.935 8.03e-07 ***
+# landuse_factorMixed              0.063595   0.032763   1.941   0.0523 .  
+# landuse_factorOpen/shrub/bog     0.063067   0.038851   1.623   0.1045    
+# landuse_factorNew forest         0.372541   0.027322  13.635  < 2e-16 ***
+# s_minor_d:time_categoryNight     0.406100   0.200408   2.026   0.0427 *  
+# s_minor_d:time_categoryTwilight -0.087063   0.242229  -0.359   0.7193    
+# s_major_d:time_categoryNight     0.313841   0.210510   1.491   0.1360    
+# s_major_d:time_categoryTwilight -0.042204   0.251656  -0.168   0.8668    
+# s_local_d:time_categoryNight    -0.257026   0.049659  -5.176 2.27e-07 ***
+# s_local_d:time_categoryTwilight -0.053840   0.058588  -0.919   0.3581  
+
+
+
+
+
+# major > 4500 | minor 500-4500 | local kal <= 500 OR local road -> minor interaction insignificant
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405755.5  405930.4 -202860.8  405721.5    216958 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.533e-01    0.3915
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                     -3.059564   7.123439  -0.430   0.6676    
+# s_sl_                            0.136101   0.006670  20.404  < 2e-16 ***
+# s_ta_                            0.006336   0.007516   0.843   0.3992    
+# s_slope                         -0.011929   0.009688  -1.231   0.2182    
+# s_minor_d                        0.028462   0.196631   0.145   0.8849    
+# s_major_d                       -0.055623   0.136547  -0.407   0.6837    
+# s_local_d                        0.188846   0.031302   6.033 1.61e-09 ***
+# landuse_factorHuman-modified    -0.323840   0.046231  -7.005 2.47e-12 ***
+# landuse_factorDeciduous          0.259841   0.053621   4.846 1.26e-06 ***
+# landuse_factorMixed              0.062614   0.032764   1.911   0.0560 .  
+# landuse_factorOpen/shrub/bog     0.058044   0.038822   1.495   0.1349    
+# landuse_factorNew forest         0.371334   0.027321  13.592  < 2e-16 ***
+# s_major_d:time_categoryNight     0.356230   0.210020   1.696   0.0899 .  
+# s_major_d:time_categoryTwilight -0.041956   0.250766  -0.167   0.8671    
+# s_local_d:time_categoryNight    -0.259304   0.049692  -5.218 1.81e-07 ***
+# s_local_d:time_categoryTwilight -0.055295   0.058669  -0.942   0.3459   
+
+# major > 4500 | minor 100-4500 | local kal <= 100 OR local road -> minor interaction insignificant
+
+
+TMBStruc_time1 <- glmmTMB(
+  num_case_ ~ s_sl_ + s_ta_ + s_slope +
+    s_minor_d + s_major_d + s_local_d +
+    landuse_factor +
+    time_category:s_minor_d + time_category:s_major_d + time_category:s_local_d +
+    (1 | str_ID) +
+    (1 | id),
+  family = poisson,
+  data = steps3,
+  doFit = FALSE
+)
+
+TMBStruc_time1$parameters$theta[1] = log(1e3)
+TMBStruc_time1$mapArg = list(theta = factor(c(NA, 1)))
+model_glmm_time1 <- glmmTMB:::fitTMB(TMBStruc_time1)
+summary(model_glmm_time1)
+
+#       AIC       BIC    logLik  deviance  df.resid 
+#  405754.4  405949.9 -202858.2  405716.4    216956 
+# 
+# Random effects:
+# 
+# Conditional model:
+#  Groups Name        Variance  Std.Dev. 
+#  str_ID (Intercept) 1.000e+06 1000.0000
+#  id     (Intercept) 1.503e-01    0.3876
+# Number of obs: 216975, groups:  str_ID, 19725; id, 8
+# 
+# Conditional model:
+#                                  Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                     -3.070887   7.123374  -0.431   0.6664    
+# s_sl_                            0.135722   0.006672  20.342  < 2e-16 ***
+# s_ta_                            0.006447   0.007516   0.858   0.3910    
+# s_slope                         -0.011823   0.009689  -1.220   0.2224    
+# s_minor_d                        0.089899   0.170200   0.528   0.5974    
+# s_major_d                       -0.073663   0.139559  -0.528   0.5976    
+# s_local_d                        0.188233   0.031291   6.015 1.79e-09 ***
+# landuse_factorHuman-modified    -0.318843   0.046256  -6.893 5.46e-12 ***
+# landuse_factorDeciduous          0.262901   0.053685   4.897 9.72e-07 ***
+# landuse_factorMixed              0.062477   0.032767   1.907   0.0566 .  
+# landuse_factorOpen/shrub/bog     0.056419   0.038834   1.453   0.1463    
+# landuse_factorNew forest         0.371653   0.027323  13.602  < 2e-16 ***
+# s_minor_d:time_categoryNight     0.380607   0.266020   1.431   0.1525    
+# s_minor_d:time_categoryTwilight -0.024971   0.324007  -0.077   0.9386    
+# s_major_d:time_categoryNight     0.271497   0.216802   1.252   0.2105    
+# s_major_d:time_categoryTwilight -0.039311   0.259868  -0.151   0.8798    
+# s_local_d:time_categoryNight    -0.260100   0.049710  -5.232 1.67e-07 ***
+# s_local_d:time_categoryTwilight -0.056354   0.058771  -0.959   0.3376   
+
+
+
+```
+
+
+
+
+```{r CI probabilities}
+calculate_time_ci<- function(model, data, road_vars, max_dist = 2000) {
+  # Get coefficient estimates and vcov
+  coefs <- fixef(model)$cond
+  vcov_matrix <- vcov(model)$cond
+  
+  # Time of day categories
+  time_cats <- c("Day", "Night", "Twilight")
+  all_predictions <- data.frame()
+
+  for (road_var in road_vars) {
+    # Get scaling info
+    var_center <- attr(data[[road_var]], "scaled:center")
+    var_scale <- attr(data[[road_var]], "scaled:scale")
+
+    dist_seq <- seq(0, max_dist, length.out = 100)
+    scaled_seq <- (dist_seq - var_center) / var_scale
+
+    for (time_cat in time_cats) {
+      interaction_name <- paste0(road_var, ":time_category", time_cat)
+
+      # Base effect and interaction
+      effect <- coefs[road_var]
+      effect_se <- sqrt(diag(vcov_matrix)[road_var])
+
+      if (interaction_name %in% names(coefs)) {
+        effect <- effect + coefs[interaction_name]
+
+        int_se <- sqrt(diag(vcov_matrix)[interaction_name])
+        covar <- vcov_matrix[road_var, interaction_name]
+        effect_se <- sqrt(effect_se^2 + int_se^2 + 2 * covar)
+      }
+
+      linear_pred <- scaled_seq * effect
+      linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
+      linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
+
+      rss <- exp(linear_pred)
+      rss_lower <- exp(linear_ci_lower)
+      rss_upper <- exp(linear_ci_upper)
+
+      prob <- rss / (rss + 10)
+      prob_lower <- rss_lower / (rss_lower + 10)
+      prob_upper <- rss_upper / (rss_upper + 10)
+
+      time_results <- data.frame(
+        distance = dist_seq,
+        probability = prob,
+        prob_lower = prob_lower,
+        prob_upper = prob_upper,
+        time_category = time_cat,
+        road_var = road_var
+      )
+
+      all_predictions <- rbind(all_predictions, time_results)
+    }
+  }
+
+  return(all_predictions)
+}
+windowsFonts(Times=windowsFont("TT Times New Roman"))
+
+plot_time_facet_single <- function(predictions, road_var) {
+  road_label <- switch(road_var,
+                       "s_major_d" = "major roads",
+                       "s_local_d" = "local roads",
+                       "s_minor_d" = "minor roads")
+  
+  time_colors <- c("Day" = "#FFC107", "Night" = "#303F9F", "Twilight" = "#7B1FA2")
+  
+  ggplot(predictions, aes(x = distance, y = probability, color = time_category)) +
+    geom_ribbon(aes(ymin = prob_lower, ymax = prob_upper, fill = time_category), 
+                alpha = 0.3, color = NA) +
+    geom_line(size = 1.2) +
+    geom_hline(yintercept = 1/11, linetype = "dashed", color = "gray50") +
+    facet_wrap(~ time_category, nrow = 1) +
+    labs(x = paste0("Distance to ", road_label, ", m"),
+         y = "Selection probability",
+         title = paste0("Moose selection probability vs. distance from ", road_label)) +
+    theme_minimal() +
+    theme(
+      text = element_text(family = "Times", size = 14),
+      legend.position = "none",
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(size = 12)
+    ) +
+    scale_color_manual(values = time_colors) +
+    scale_fill_manual(values = time_colors)
+}
+
+
+# Define road vars
+road_vars <- c("s_major_d", "s_local_d", "s_minor_d")
+
+# Generate predictions
+preds <- calculate_time_ci(model_glmm3.1, steps3, road_vars)
+
+# Plot each road type separately
+for (road in road_vars) {
+  road_preds <- subset(preds, road_var == road)
+  print(plot_time_facet_single(road_preds, road))
+}
+
+
+
+```

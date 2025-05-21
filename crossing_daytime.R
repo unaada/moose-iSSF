@@ -1,9 +1,11 @@
 library(suncalc)
 library(chron)
 library(lubridate)
+library(RColorBrewer)
+library(dplyr)
+library(ggplot2)
 
-
-df <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\crossing_time\\intersections_time.csv")
+df <- reggplot2df <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\crossing_time\\intersections_time.csv")
 df$d_start <- as.Date(df$d_start, format = "%d/%m/%Y")
 
 sunlight <- getSunlightTimes(date = df$d_start, lon = 25.45, lat = 59.05, 
@@ -161,10 +163,9 @@ chi_test2 <- chisq.test(chi_table)
 
 #----------------------heatmaps ----------------------------------------------------------------------------------------------
 tracks <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\crossing_time\\moose_tracks.csv")
-head(tracks)
 
 # inspect the data completeness...
-tracks %>%
+tracks %>% 
   mutate(month = lubridate::month(start, label = TRUE)) %>%
   count(month) %>% 
   arrange(n)
@@ -180,57 +181,6 @@ tracks_filtered <- tracks %>%
     hour = lubridate::hour(start)
   ) %>%
   filter(!(month == "Sep"))
-
-# -------------------------------------------------Filter for just August data at hour 20---------
-august_hour20 <- tracks_filtered %>%
-  filter(month == "Aug", hour == 20)
-
-head(august_hour20, 5)
-
-august_hour20_by_day <- august_hour20 %>%
-  mutate(day_string = substr(start, 9, 10)) %>% # Extract just the day part manually
-  group_by(day_string) %>%
-  summarize(
-    count = n(),
-    avg_speed = mean(speed_kph),
-    max_speed = max(speed_kph)
-  ) %>%
-  arrange(desc(avg_speed))
-
-august_hour20_by_day
-
-# Identify the days with unusually high speeds
-high_speed_threshold <- quantile(august_hour20$speed_kph, 0.9) # Top 10% speeds
-print(paste0("High speed threshold: ", high_speed_threshold, " km/h"))
-
-# Plot the daily maximum speeds in August at hour 20
-ggplot(august_hour20_by_day, aes(x = day_string, y = avg_speed)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  geom_hline(yintercept = high_speed_threshold, linetype = "dashed", color = "red") +
-  labs(title = "Maximum Moose Speed by Day in August at 20:00",
-       x = "Day of Month", 
-       y = "Maximum Speed (km/h)") +
-  theme_minimal()
-
-
-# Filter for August 31st data only
-aug31_data <- august_hour20 %>%
-  filter(substr(start, 9, 10) == "31")
-
-# Group by moose ID to see which ones have highest speeds
-aug31_by_moose <- aug31_data %>%
-  group_by(group_id) %>%
-  summarize(
-    sample_size = n(),
-    avg_speed_kph = mean(speed_kph),
-    max_speed_kph = max(speed_kph),
-    median_speed_kph = median(speed_kph)
-  ) %>%
-  arrange(desc(max_speed_kph))  # Sort by maximum speed
-
-# View the result
-aug31_by_moose
-
 
 # -------------------------------------------------Filter for just november data at hour 16---------
 nov16<- tracks_filtered %>%
@@ -284,9 +234,11 @@ ggplot(aes(x = month, y = hour, fill = avg_speed_kph)) +
   coord_fixed(ratio = 0.4)+
   scale_fill_viridis_c() +
   labs(x = "Month", y = "Hour of day", fill = "Moose speed 
-       (kmh)") +
+       (km/h)") +
   scale_x_discrete(labels = c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep")) +
-  theme_minimal()
+  theme_minimal() +
+  theme(text = element_text(family = "Times", size = 14))
+ggsave("moose_speed.png", width = 6, height = 4, bg = "white", device = png)
 
 #------------------------------------------------- plotting for cutoff point -------------------------
 
@@ -312,6 +264,51 @@ ggplot(seasonal_med, aes(x = hour_half, y = med_distance)) +
   geom_line() +
   geom_hline(yintercept = 18, color = "red", linetype = "dashed") +
   facet_wrap(~season, ncol = 2) +
+  labs(x = "Hour of day",
+       y = "Median step length, m") +
+  theme_bw() +
+  scale_x_continuous(breaks = seq(0, 23, by = 4))
+
+windowsFonts(Times=windowsFont("TT Times New Roman"))
+
+ggplot(seasonal_med, aes(x = hour_half, y = med_distance, color = season)) +
+  geom_point(size = 2.5) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 18, color = "#464649", linetype = "dashed", linewidth = 0.4) +
+  facet_wrap(~season, ncol = 2) +
+  scale_color_manual(values = c("Winter" = "#8FBCE6", "Spring" = "#EBA0C6", "Summer" = "#80CFA9")) +
+  labs(title = "Median step length by hour of day and season",
+       x = "Hour of day",
+       y = "Median step length, m",
+       color = "Season") +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Times", size = 12),
+    plot.title = element_text(hjust = 0.5, vjust = 0.5, size = 16),
+    axis.title.x = element_text(vjust = -0.5),
+    axis.title.y = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.position = "bottom"
+  ) +
+  scale_x_continuous(breaks = seq(0, 23, by = 4)) +
+  scale_y_continuous(limits = c(min(seasonal_med$med_distance) * 0.9, max(seasonal_med$med_distance) * 1.1))
+
+ggsave("median_sl_season2.png", width = 6, height = 6, bg = "white", device = png)
+
+
+# hourly medians for the full dataset
+full_med <- tracks_filtered %>%
+  mutate(
+    hour_half = hour + ifelse(minute(start) >= 30, 0.5, 0)
+  ) %>%
+  group_by(hour_half) %>%
+  summarise(med_distance = median(distance_m), .groups = 'drop')
+
+# plot for the full dataset
+ggplot(full_med, aes(x = hour_half, y = med_distance)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 18, color = "red", linetype = "dashed") +
   labs(x = "Hour of day",
        y = "Median step length, m") +
   theme_bw() +
@@ -369,18 +366,94 @@ coul <- brewer.pal(9, "BuPu")
 ggplot(traffic_aadt, aes(x = month, y = hour, fill = aadt)) +
   geom_tile() +
   coord_fixed(ratio = 0.4)+
-  scale_fill_gradientn(colors = coul) +
+  scale_fill_gradientn(
+    colors = coul,
+    limits = c(0, 400),
+    na.value = "white"
+  ) +
   labs(
     x = "Month",
     y = "Hour of day",
-    fill = "AADT on road 2
-    2018-19 mean"
+    fill = "Vehicles per hour",
+    title = "Road 2 2018-19 mean traffic volume"
   ) +
   scale_x_discrete(labels = c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep")) +
-  theme_minimal()
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Times", size = 14))
 
+
+ggplot(traffic_aadt, aes(x = aadt)) +
+  geom_histogram(binwidth = 10, fill = "steelblue", color = "white") +
+  labs(
+    x = "Average hourly traffic",
+    y = "Frequency",
+    title = "Distribution of AADT (Road 2)"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Times", size = 14))
+
+
+# ----------------------------------------- road 5 -------------------------
 
 traffic2 <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\crossing_time\\traffic_5_14_others.csv")
+
+
+traffic2 <- traffic2 %>%
+  mutate(
+    ts = as.POSIXct(ts, format = "%Y-%m-%d %H:%M:%S", tz = "Europe/Tallinn"),
+    month = factor(month(ts, label = TRUE, abbr = TRUE)),
+    hour = hour(ts)
+  ) %>%
+  filter(!(month %in% c("Sep", "Oct"))) %>%
+  filter(siteno %in% c(5095, 5097)) %>% 
+  group_by(month, hour, siteno) %>%
+  summarise(
+    avg_total = mean(total, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+traffic_aadt2 <- traffic2 %>%
+  group_by(month, hour) %>%
+  summarise(
+    aadt = mean(avg_total, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  mutate(
+    month = factor(
+      month, 
+      levels = c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep")))
+
+coul <- brewer.pal(9, "BuPu")
+
+ggplot(traffic_aadt2, aes(x = month, y = hour, fill = aadt)) +
+  geom_tile() +
+  coord_fixed(ratio = 0.4)+
+  scale_fill_gradientn(
+    colors = coul,
+    limits = c(0, 150),  # set exact min/max for color scale
+    na.value = "white"
+  ) +
+  labs(
+    x = "Month",
+    y = "Hour of day",
+    fill = "Vehicles per hour",
+    title = "Road 5 2018-19 mean traffic volume"
+  ) +
+  scale_x_discrete(labels = c("Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep")) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Times", size = 14))
+
+ggplot(traffic_aadt2, aes(x = aadt)) +
+  geom_histogram(binwidth = 9, fill = "steelblue", color = "white") +
+  labs(
+    x = "Average AADT",
+    y = "Frequency",
+    title = "Distribution of AADT (Road 5)"
+  ) +
+  theme_minimal()
 
 
 
@@ -391,52 +464,48 @@ traffic2 <- read.csv("D:\\Users\\amand\\Documents\\qgis\\masters_qgis\\vectors\\
 tracks_filtered$date <- as.Date(tracks_filtered$start)
 
 # Calculate daily average speeds
-daily_speeds <- aggregate(speed_kph ~ date, data=tracks_filtered, FUN=mean)
+daily_distance <- aggregate(distance_m ~ date, data=tracks_filtered, FUN=mean)
 
 # Add a day of year column for easier analysis
-daily_speeds$doy <- as.numeric(format(daily_speeds$date, "%j"))
+daily_distance$doy <- as.numeric(format(daily_distance$date, "%j"))
 
 # Order by date
-daily_speeds <- daily_speeds[order(daily_speeds$date),]
+daily_distance <- daily_distance[order(daily_distance$date),]
 
 # Calculate 7-day moving average
 library(zoo)
-daily_speeds$ma7 <- rollmean(daily_speeds$speed_kph, 7, fill=NA)
-
-# Plot for visualization
-plot(daily_speeds$date, daily_speeds$speed_kph, type="l", 
-     xlab="Date", ylab="Speed (kph)")
-lines(daily_speeds$date, daily_speeds$ma7, col="blue", lwd=2)
-
-
-winter_to_spring <- as.Date("2019-04-01")  # Winter to Spring
-spring_to_summer <- as.Date("2019-06-01") 
-
+daily_distance$ma7 <- rollmean(daily_distance$distance_m, 7, fill=NA)
 
 
 # Create the plot
-ggplot(daily_speeds, aes(x=date)) +
+ggplot(daily_distance, aes(x=date)) +
   theme_minimal() +
-  geom_line(aes(y=speed_kph, color="Daily Speed"), alpha=0.6) +
-  geom_line(aes(y=ma7, color="7-day Moving Average"), size=1.2) +
-  geom_vline(xintercept = as.numeric(as.Date("2019-04-01")), 
-             linetype = "dashed", color = "darkgreen", alpha = 0.7) +
-  geom_vline(xintercept = as.numeric(as.Date("2019-07-01")), 
-             linetype = "dashed", color = "orange", alpha = 0.7) +
+  geom_line(aes(y=distance_m, color="Daily distance"), alpha=0.6) +
+  geom_line(aes(y=ma7, color="7-day moving average"), size=1.2) +
+  geom_vline(xintercept = as.numeric(as.Date("2019-04-07")), 
+             linetype = "dashed", color = "#EBA0C6", size = 0.7) +
+  geom_vline(xintercept = as.numeric(as.Date("2019-06-01")), 
+             linetype = "dashed", color = "#80CFA9", size = 0.7) +
   scale_color_manual(name="", 
-                     values=c("Daily Speed"="gray40", 
-                              "7-day Moving Average"="blue")) +
+                     values=c("Daily distance"="gray40", 
+                              "7-day moving average"="blue")) +
   
-  scale_x_date(date_breaks="1 month", date_labels="%b") +
-  labs(title="Daily Movement Speed with 7-day Moving Average",
+  scale_x_date(breaks = function(x) seq.Date(from = as.Date("2018-11-23"), 
+                                             to = as.Date("2019-08-31"), 
+                                             by = "1 month"),
+               date_labels = "%b") +
+  labs(title="Daily distance travelled with 7-day moving average",
        x="Month",
-       y="Speed (kph)") +
+       y="Distance, m") +
   theme(
     axis.text.x = element_text(angle=0, hjust=0.5, size=10),
     legend.position = "top",
     panel.grid.minor = element_blank(),
-    plot.title = element_text(hjust=0.5, size=14)
-  )
+    plot.title = element_text(hjust=0.5),
+    text = element_text(family = "Times", size = 14)
+    )
+
+ggsave("daily_distance_season.png", width = 10, height = 6, bg = "white", device = png)
 
 
 # ---------------------------------------------- moose movement speed individual ---------------
