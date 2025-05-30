@@ -29,9 +29,6 @@ library(glmmTMB)
 # land cover: different forest types, open, anthropogenic, water, new forest
 # time of day:distance_to_road and time:crossing(y/n)
 # season - after decding which models, then build for 3 seasons?
-# -- perhaps -- make also the angle analysis = avoidance, attraction, corridor
-
-
 
 ```
 
@@ -209,15 +206,6 @@ landuse <- terra::classify(corine, m) %>%
   crop(study_area) %>% 
   mask(study_area) %>% 
   setNames("landuse")
-
-#### 2. roads + distance
-# distance to roads code
-  # mutate(
-  #   nearest_major = st_distance(geometry,st_union(roads[roads$class>= 2, ])),
-  #   nearest_minor = st_distance(geometry, st_union(roads[roads$class== 1, ])),
-  #   nearest_local = st_distance(geometry, st_union(roads[roads$class == 0, ]))
-  # )
-
 
 major_roads_dist <- roads[roads$class ==3,] %>%
   rasterize(landuse) %>%
@@ -1156,6 +1144,9 @@ saveRDS(model_glmm3_3.0.2, "model_glmm3_3.0.2.rds")
 # -------------------------------- AIC based method --------------------------
 
 ```{r}
+
+
+# Claude-e code for doing backwards parameter dropping one by one in a loop
 # Enhanced function that returns parameter estimates and metrics for summary table
 run_stepwise_aic_selection <- function(data, model_type = "basic", max_steps = 7) {
   # Create results tracking data frame
@@ -1490,56 +1481,6 @@ all_model_results[["season"]] <- run_stepwise_aic_selection(steps3, model_type =
 # Save the updated results
 saveRDS(all_model_results, "saved_models/all_model_results_with_season.rds")
 
-# 
-# # Extract data for summary table
-# summary_table_data <- extract_summary_table_data(all_model_results)
-# 
-# # Print summary table
-# print(summary_table_data)
-# 
-# # Save summary table to CSV
-# write.csv(summary_table_data, "model_summary_table.csv", row.names = FALSE)
-# 
-# # Function to generate formatted table like the one in the image
-# create_formatted_table <- function(summary_data) {
-#   # Identify common fixed effects columns
-#   effect_cols <- grep("_est$", names(summary_data), value = TRUE)
-#   
-#   # Create a nicer formatted table
-#   library(knitr)
-#   library(kableExtra)
-#   
-#   # Select relevant columns and rename them
-#   table_data <- summary_data[, c("model_name", "AIC", "delta_AIC", "weight", "df", "logLik")]
-#   
-#   # Rank models
-#   table_data$Rank <- rank(table_data$AIC)
-#   
-#   # Add parameter estimates from fixed effects
-#   for (col in effect_cols) {
-#     param_name <- sub("_est$", "", col)
-#     table_data[[param_name]] <- summary_data[[col]]
-#   }
-#   
-#   # Add random effects
-#   table_data$random_str_ID <- summary_data$rand_str_ID
-#   table_data$random_id <- summary_data$rand_id
-#   
-#   # Reorder columns
-#   table_data <- table_data[, c("Rank", "model_name", effect_cols, 
-#                                 "random_str_ID", "random_id", 
-#                                 "df", "logLik", "AIC", "delta_AIC", "weight")]
-#   
-#   # Format table
-#   formatted_table <- kable(table_data, format = "html", digits = 4,
-#                           caption = "Model selection table: Models ranked by AIC") %>%
-#     kable_styling(bootstrap_options = c("striped", "hover"))
-#   
-#   return(formatted_table)
-# }
-# 
-# # Generate formatted table
-# formatted_table <- create_formatted_table(summary_table_data)
 ```
 
 
@@ -1668,197 +1609,6 @@ for (model_name in names(updated_model_tables)) {
 
 
 ```{r other models}
-
-
-#------------------------------------------------------------------season -------------------------------------
-
-steps3$season <- steps3$season %>% relevel(ref = "Winter")
-
-
-TMBStruc2.0 <- glmmTMB(
-  num_case_ ~ s_sl_ + s_ta_ + s_slope +
-    s_state_d + s_local_d + 
-    landuse_factor +
-    season:s_state_d + season:s_local_d +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3,
-  doFit = FALSE
-)
-
-TMBStruc2.0$parameters$theta[1] = log(1e3)  
-TMBStruc2.0$mapArg = list(theta = factor(c(NA, 1)))
-model_glmm2.0 <- glmmTMB:::fitTMB(TMBStruc2.0)
-summary(model_glmm2.0)
-
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  405736.8  405901.4 -202852.4  405704.8    216959 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 1.506e-01    0.3881
-# Number of obs: 216975, groups:  str_ID, 19725; id, 8
-# 
-# Conditional model:
-#                               Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -3.069432   7.123376  -0.431 0.666544    
-# s_sl_                         0.135621   0.006675  20.318  < 2e-16 ***
-# s_ta_                         0.007191   0.007517   0.957 0.338755    
-# s_slope                      -0.010474   0.009685  -1.081 0.279480    
-# s_state_d                     0.469615   0.126579   3.710 0.000207 ***
-# s_local_d                    -0.052818   0.035977  -1.468 0.142076    
-# landuse_factorHuman-modified -0.309841   0.046245  -6.700 2.08e-11 ***
-# landuse_factorDeciduous       0.275035   0.053723   5.120 3.06e-07 ***
-# landuse_factorMixed           0.071649   0.032774   2.186 0.028806 *  
-# landuse_factorOpen/shrub/bog  0.068478   0.038857   1.762 0.078016 .  
-# landuse_factorNew forest      0.378946   0.027345  13.858  < 2e-16 ***
-# s_state_d:seasonSummer       -0.159593   0.175671  -0.908 0.363628    
-# s_state_d:seasonSpring        0.012300   0.201704   0.061 0.951375    
-# s_local_d:seasonSummer        0.235814   0.050229   4.695 2.67e-06 ***
-# s_local_d:seasonSpring        0.152431   0.057880   2.634 0.008449 **  
-
-# remove ta_ predictor
-
-TMBStruc2.1 <- glmmTMB(
-  num_case_ ~ s_sl_ + s_slope +
-    s_state_d + s_local_d + 
-    landuse_factor +
-    season:s_state_d + season:s_local_d +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3,
-  doFit = FALSE
-)
-
-TMBStruc2.1$parameters$theta[1] = log(1e3)  
-TMBStruc2.1$mapArg = list(theta = factor(c(NA, 1)))
-model_glmm2.1 <- glmmTMB:::fitTMB(TMBStruc2.1)
-summary(model_glmm2.1)
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  405735.7  405890.0 -202852.8  405705.7    216960 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance Std.Dev. 
-#  str_ID (Intercept) 1.00e+06 1000.0000
-#  id     (Intercept) 1.51e-01    0.3886
-# Number of obs: 216975, groups:  str_ID, 19725; id, 8
-# 
-# Conditional model:
-#                               Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -3.073768   7.123373  -0.432 0.666102    
-# s_sl_                         0.135740   0.006674  20.339  < 2e-16 ***
-# s_slope                      -0.010360   0.009681  -1.070 0.284577    
-# s_state_d                     0.468612   0.126473   3.705 0.000211 ***
-# s_local_d                    -0.053452   0.035945  -1.487 0.136998    
-# landuse_factorHuman-modified -0.308415   0.046203  -6.675 2.47e-11 ***
-# landuse_factorDeciduous       0.275359   0.053709   5.127 2.95e-07 ***
-# landuse_factorMixed           0.071790   0.032765   2.191 0.028449 *  
-# landuse_factorOpen/shrub/bog  0.068868   0.038844   1.773 0.076237 .  
-# landuse_factorNew forest      0.379114   0.027339  13.867  < 2e-16 ***
-# s_state_d:seasonSummer       -0.159772   0.175534  -0.910 0.362713    
-# s_state_d:seasonSpring        0.011062   0.201547   0.055 0.956231    
-# s_local_d:seasonSummer        0.235661   0.050194   4.695 2.67e-06 ***
-# s_local_d:seasonSpring        0.152405   0.057839   2.635 0.008414 ** 
-
-# remove slope predictor
-TMBStruc2.2 <- glmmTMB(
-  num_case_ ~ s_sl_ +
-    s_state_d + s_local_d + 
-    landuse_factor +
-    season:s_state_d + season:s_local_d +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3,
-  doFit = FALSE
-)
-
-TMBStruc2.2$parameters$theta[1] = log(1e3)  
-TMBStruc2.2$mapArg = list(theta = factor(c(NA, 1)))
-model_glmm2.2 <- glmmTMB:::fitTMB(TMBStruc2.2)
-summary(model_glmm2.2)
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  405734.9  405878.9 -202853.4  405706.9    216961 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 1.501e-01    0.3874
-# Number of obs: 216975, groups:  str_ID, 19725; id, 8
-# 
-# Conditional model:
-#                               Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -3.069602   7.123372  -0.431 0.666527    
-# s_sl_                         0.135681   0.006673  20.332  < 2e-16 ***
-# s_state_d                     0.471642   0.126444   3.730 0.000191 ***
-# s_local_d                    -0.051963   0.035915  -1.447 0.147944    
-# landuse_factorHuman-modified -0.313174   0.045987  -6.810 9.76e-12 ***
-# landuse_factorDeciduous       0.273342   0.053676   5.092 3.54e-07 ***
-# landuse_factorMixed           0.070616   0.032746   2.156 0.031045 *  
-# landuse_factorOpen/shrub/bog  0.068008   0.038835   1.751 0.079909 .  
-# landuse_factorNew forest      0.377448   0.027295  13.828  < 2e-16 ***
-# s_state_d:seasonSummer       -0.160395   0.175518  -0.914 0.360804    
-# s_state_d:seasonSpring        0.008238   0.201563   0.041 0.967397    
-# s_local_d:seasonSummer        0.235669   0.050187   4.696 2.65e-06 ***
-# s_local_d:seasonSpring        0.153335   0.057838   2.651 0.008022 ** 
-
-# remove state interaction predictor
-TMBStruc2.3 <- glmmTMB(
-  num_case_ ~ s_sl_ +
-    s_state_d + s_local_d + 
-    landuse_factor +
-    season:s_local_d +
-    (1 | str_ID) +   
-    (1 | id), 
-  family = poisson,
-  data = steps3,
-  doFit = FALSE
-)
-
-TMBStruc2.3$parameters$theta[1] = log(1e3)  
-TMBStruc2.3$mapArg = list(theta = factor(c(NA, 1)))
-model_glmm2.3 <- glmmTMB:::fitTMB(TMBStruc2.3)
-summary(model_glmm2.3)
-
-
-#       AIC       BIC    logLik  deviance  df.resid 
-#  405731.9  405855.4 -202854.0  405707.9    216963 
-# 
-# Random effects:
-# 
-# Conditional model:
-#  Groups Name        Variance  Std.Dev. 
-#  str_ID (Intercept) 1.000e+06 1000.0000
-#  id     (Intercept) 1.491e-01    0.3862
-# Number of obs: 216975, groups:  str_ID, 19725; id, 8
-# 
-# Conditional model:
-#                               Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -3.069358   7.123343  -0.431   0.6666    
-# s_sl_                         0.135677   0.006671  20.337  < 2e-16 ***
-# s_state_d                     0.410250   0.076768   5.344 9.09e-08 ***
-# s_local_d                    -0.049187   0.035608  -1.381   0.1672    
-# landuse_factorHuman-modified -0.314120   0.045978  -6.832 8.37e-12 ***
-# landuse_factorDeciduous       0.273108   0.053675   5.088 3.62e-07 ***
-# landuse_factorMixed           0.070487   0.032744   2.153   0.0313 *  
-# landuse_factorOpen/shrub/bog  0.067905   0.038836   1.749   0.0804 .  
-# landuse_factorNew forest      0.377491   0.027296  13.830  < 2e-16 ***
-# s_local_d:seasonSummer        0.229840   0.049725   4.622 3.80e-06 ***
-# s_local_d:seasonSpring        0.153335   0.057153   2.683   0.0073 ** 
-
-
 
 
 #------------------------------------------------- making road crossing detection -----------------------
@@ -2595,56 +2345,25 @@ summary(model_glmm55.1)
 
 ```{r step length ~ distance to road}
 
-# Calculate distance to nearest road for each step
+#distance to nearest road for each step
 steps_with_dist <- steps3_original
 
-# Create distance bands
+#distance bands
 steps_with_dist$dist_band <- cut(steps_with_dist$state_d, 
                                 breaks = c(-Inf, 100, 300, 500, 1000, 1500, 2000, Inf),
                                 labels = c("<100m", "100-300m", "300-500m", "500-1000m", "1000-1500m", "1500-2000m", ">2000m"))
 
 
-# Only use used steps (case_ == TRUE)
+# used steps
 used_steps <- steps_with_dist[steps_with_dist$case_ == TRUE,]
 
-# Calculate mean step length by distance band
+#mean step length by distance band
 sl_by_dist <- aggregate(sl_ ~ dist_band, data = used_steps, FUN = mean)
 
-# Visualize
 ggplot(used_steps, aes(x = dist_band, y = sl_)) +
   geom_boxplot() +
   labs(x = "Distance to road, m", y = "Step length, m",
        title = "Movement speed vs distance to road")
-
-# Statistical test
-model_sl <- lm(sl_ ~ dist_band, data = used_steps)
-anova(model_sl)
-
-
-# Convert turning angles to absolute deviation from straight-line movement
-used_steps$turn_abs <- abs(used_steps$ta_)
-
-used_steps$turn_abs_deg <- used_steps$turn_abs * (180/pi)
-
-# Calculate mean turning angle by distance band
-ta_by_dist <- aggregate(turn_abs_deg ~ dist_band, data = used_steps, FUN = mean)
-
-# Visualize
-ggplot(used_steps, aes(x = dist_band, y = turn_abs_deg)) +
-  geom_boxplot() +
-  labs(x = "Distance to road, m", y = "Absolute turning angle, degrees",
-       title = "Movement direction persistance vs distance to road")
-
-# Statistical test
-model_ta <- lm(turn_abs ~ dist_band, data = used_steps)
-anova(model_ta)
-
-ggplot(used_steps, aes(x = ta_ * (180/pi), fill = dist_band)) +
-  geom_density(alpha = 0.5) +
-  facet_wrap(~ dist_band) +
-  labs(x = "Turning angle, degrees", y = "Density",
-       title = "Distribution of turning Angles by distance from state road")
-
 
 
 ggplot(used_steps, aes(x = log(sl_), fill = dist_band)) +
@@ -2654,12 +2373,10 @@ ggplot(used_steps, aes(x = log(sl_), fill = dist_band)) +
        title = "Distribution of step length by distance from state road")
 
 
-
 ggplot(used_steps, aes(x = log(sl_))) +
   geom_histogram(alpha = 0.5) +
   labs(x = "Step length, m", y = "Density",
        title = "Distribution of step length")
-
 
 
 ggplot(steps3, aes(x = slope)) +
@@ -2714,7 +2431,6 @@ ggplot(used_steps, aes(x = sl_)) +
   geom_histogram(alpha = 0.5) +
   labs(x = "Step length, m", y = "Density",
        title = "Distribution of step length")
-
 
 
 ggplot(steps3_original, aes(x = slope)) +
@@ -2876,24 +2592,18 @@ season_summary <- rbind(Winter = winter_summary, Spring = spring_summary, Summer
 
 
 # adding standard error and plotting
-
-# We need to calculate standard errors from your original data
-# For each time category (Day, Night, Twilight)
 time_data <- list()
-
-# Let's calculate means and standard errors for each time category
 for (time in c("Day", "Night", "Twilight")) {
-  # Subset data
   subset_data <- steps3_original[steps3_original$case_ == TRUE & 
                                 steps3_original$time_category == time, ]
   
-  # Calculate local road statistics
+  #local road statistics
   local_mean <- mean(subset_data$local_d, na.rm = TRUE)
   local_sd <- sd(subset_data$local_d, na.rm = TRUE)
   local_n <- sum(!is.na(subset_data$local_d))
   local_se <- local_sd / sqrt(local_n)
   
-  # Calculate state road statistics
+  #state road statistics
   state_mean <- mean(subset_data$state_d, na.rm = TRUE)
   state_sd <- sd(subset_data$state_d, na.rm = TRUE)
   state_n <- sum(!is.na(subset_data$state_d))
@@ -2909,10 +2619,9 @@ for (time in c("Day", "Night", "Twilight")) {
   )
 }
 
-# Combine results
 time_df <- do.call(rbind, time_data)
 
-# Reshape for plotting
+# long for plotting
 time_long <- reshape(time_df,
                    direction = "long",
                    varying = list(c("local_mean", "state_mean"), c("local_se", "state_se")),
@@ -2920,7 +2629,6 @@ time_long <- reshape(time_df,
                    timevar = "road_type",
                    times = c("Local roads", "State roads"))
 
-# Plot with error bars
 ggplot(time_long, aes(x = time_category, y = mean, 
                     group = road_type, color = road_type)) +
   geom_line(size = 1) +
@@ -2939,21 +2647,21 @@ ggplot(time_long, aes(x = time_category, y = mean,
   ) +
   labs(title = "Average distance to road types by time of day")
 
-# Similarly for season plot
+
+
+# season
 season_data <- list()
 
 for (seas in c("Winter", "Spring", "Summer")) {
-  # Subset data
+
   subset_data <- steps3_original[steps3_original$case_ == TRUE & 
                                 steps3_original$season == seas, ]
   
-  # Calculate local road statistics
   local_mean <- mean(subset_data$local_d, na.rm = TRUE)
   local_sd <- sd(subset_data$local_d, na.rm = TRUE)
   local_n <- sum(!is.na(subset_data$local_d))
   local_se <- local_sd / sqrt(local_n)
   
-  # Calculate state road statistics
   state_mean <- mean(subset_data$state_d, na.rm = TRUE)
   state_sd <- sd(subset_data$state_d, na.rm = TRUE)
   state_n <- sum(!is.na(subset_data$state_d))
@@ -2969,10 +2677,8 @@ for (seas in c("Winter", "Spring", "Summer")) {
   )
 }
 
-# Combine results
 season_df <- do.call(rbind, season_data)
 
-# Reshape for plotting
 season_long <- reshape(season_df,
                      direction = "long",
                      varying = list(c("local_mean", "state_mean"), c("local_se", "state_se")),
@@ -2980,7 +2686,6 @@ season_long <- reshape(season_df,
                      timevar = "road_type",
                      times = c("Local roads", "State roads"))
 
-# Plot with error bars
 ggplot(season_long, aes(x = season, y = mean, 
                        group = road_type, color = road_type)) +
   geom_line(size = 1) +
@@ -3082,17 +2787,15 @@ ratio_df <- props_df %>%
   mutate(
     ratio = Used / Available,
     
-    # Same calculations for standard errors as before
+    # same calculations for standard errors as before
     n_used = sum(used_counts$sample_size[used_counts$time_category == time_category]),
     n_avail = n_used * 10,
     
     se_used = sqrt(Used * (1-Used) / n_used),
     se_avail = sqrt(Available * (1-Available) / n_avail),
     
-    # Standard error for the ratio using delta method
     se_ratio = ratio * sqrt((se_used/Used)^2 + (se_avail/Available)^2),
     
-    # 95% confidence intervals for the ratio (not the log)
     ci_lower = ratio - 1.96 * se_ratio,
     ci_upper = ratio + 1.96 * se_ratio
   )
@@ -3165,17 +2868,14 @@ ratio_df <- props_df %>%
   mutate(
     ratio = Used / Available,
     
-    # Same calculations for standard errors as before
     n_used = sum(used_counts$sample_size[used_counts$time_category == time_category]),
     n_avail = n_used * 10,
     
     se_used = sqrt(Used * (1-Used) / n_used),
     se_avail = sqrt(Available * (1-Available) / n_avail),
     
-    # Standard error for the ratio using delta method
     se_ratio = ratio * sqrt((se_used/Used)^2 + (se_avail/Available)^2),
     
-    # 95% confidence intervals for the ratio (not the log)
     ci_lower = ratio - 1.96 * se_ratio,
     ci_upper = ratio + 1.96 * se_ratio
   )
@@ -3226,27 +2926,25 @@ calculate_crossing_ratio <- function(data, road_type = "state") {
   # Determine which crossing variable to use
   crossing_var <- paste0("crosses_", road_type)
   
-  # Count observed crossings (actual moose steps)
+  # observed crossings (actual moose steps)
   observed <- data[data$case_ == TRUE, ]
   total_observed <- nrow(observed)
   observed_crossings <- sum(observed[[crossing_var]])
   observed_prop <- observed_crossings / total_observed
   
-  # Count expected crossings (random steps)
+  #  expected crossings (random steps)
   expected <- data[data$case_ == FALSE, ]
   total_expected <- nrow(expected)
   expected_crossings <- sum(expected[[crossing_var]])
   expected_prop <- expected_crossings / total_expected
   
-  # Calculate ratio (accounting for 10:1 sampling of random:observed steps)
+  #  ratio (accounting for 10:1 sampling of random:observed steps)
   ratio <- observed_prop / expected_prop
   
-  # Calculate standard error and 95% CI for the ratio using delta method
-  # For proportions: SE = sqrt(p*(1-p)/n)
+  # prop SE = sqrt(p*(1-p)/n)
   se_obs <- sqrt(observed_prop * (1 - observed_prop) / total_observed)
   se_exp <- sqrt(expected_prop * (1 - expected_prop) / total_expected)
   
-  # For ratio: using approximation based on propagation of error
   # SE_ratio ≈ ratio * sqrt((SE_obs/obs_prop)^2 + (SE_exp/exp_prop)^2)
   se_ratio <- ratio * sqrt((se_obs/observed_prop)^2 + (se_exp/expected_prop)^2)
   
@@ -3254,7 +2952,7 @@ calculate_crossing_ratio <- function(data, road_type = "state") {
   ci_lower <- ratio - 1.96 * se_ratio
   ci_upper <- ratio + 1.96 * se_ratio
   
-  # Return results
+  #  results
   result <- data.frame(
     road_type = road_type,
     observed_crossings = observed_crossings,
@@ -3276,34 +2974,31 @@ crossing_ratios <- rbind(state_ratio, local_ratio)
 
 # calculate crossing ratios by category
 calculate_crossing_ratio_by_category <- function(data, road_type = "state", category_var = "time_category") {
-  # Determine which crossing variable to use
   crossing_var <- paste0("crosses_", road_type)
   
-  # Get all category levels
   categories <- unique(data[[category_var]])
   results <- data.frame()
   
   for (cat in categories) {
-    # Subset data for this category
     cat_data <- data[data[[category_var]] == cat, ]
     
-    # Observed crossings
+    # observed crossings
     observed <- cat_data[cat_data$case_ == TRUE, ]
     total_observed <- nrow(observed)
     if (total_observed == 0) next
     observed_crossings <- sum(observed[[crossing_var]])
     observed_prop <- observed_crossings / total_observed
     
-    # Expected crossings
+    # expected crossings
     expected <- cat_data[cat_data$case_ == FALSE, ]
     total_expected <- nrow(expected)
     expected_crossings <- sum(expected[[crossing_var]])
     expected_prop <- expected_crossings / total_expected
     
-    # Calculate ratio
+    # ratio
     ratio <- observed_prop / expected_prop
     
-    # Calculate SE and CI
+    # SE and CI
     se_obs <- sqrt(observed_prop * (1 - observed_prop) / total_observed)
     se_exp <- sqrt(expected_prop * (1 - expected_prop) / total_expected)
     se_ratio <- ifelse(
@@ -3315,7 +3010,7 @@ calculate_crossing_ratio_by_category <- function(data, road_type = "state", cate
     ci_lower <- ratio - 1.96 * se_ratio
     ci_upper <- ratio + 1.96 * se_ratio
     
-    # Store results
+    # results
     cat_result <- data.frame(
       road_type = road_type,
       category = cat,
@@ -3409,113 +3104,31 @@ ggsave("crossing_ratio.png", height = 6, width = 8,  bg = "white", device = png)
 
 
 
-```{r crossing model visualisation}
-
-# Calculate RSS values for each landuse type and crossing status
-landuse_levels <- levels(steps3$landuse_factor)
-
-# Create a data frame to store results
-rss_data <- data.frame(
-  landuse = rep(landuse_levels, each = 2),
-  crossing = rep(c("No", "Yes"), times = length(landuse_levels)),
-  stringsAsFactors = FALSE
-)
-
-# Get coefficients from the model
-coefs <- fixef(model_glmm_local)$cond
-
-# Calculate linear predictor for each combination
-rss_data$linear_pred <- 0  # Initialize
-
-for (i in 1:nrow(rss_data)) {
-  land <- rss_data$landuse[i]
-  cross <- rss_data$crossing[i] == "Yes"
-  
-  # Start with intercept
-  pred <- coefs["(Intercept)"]
-  
-  # Add landuse effect if not reference level (Coniferous)
-  if (land != "Coniferous") {
-    pred <- pred + coefs[paste0("landuse_factor", land)]
-  }
-  
-  # Add crossing effect and interaction if crossing=Yes
-  if (cross) {
-    pred <- pred + coefs["crosses_localTRUE"]
-    
-    # Add interaction if not reference level
-    if (land != "Coniferous") {
-      interaction_term <- paste0("crosses_localTRUE:landuse_factor", land)
-      if (interaction_term %in% names(coefs)) {
-        pred <- pred + coefs[interaction_term]
-      }
-    }
-  }
-  
-  rss_data$linear_pred[i] <- pred
-}
-
-# Convert to RSS (relative to no crossing in coniferous)
-reference_value <- rss_data$linear_pred[rss_data$landuse == "Coniferous" & 
-                                      rss_data$crossing == "No"]
-rss_data$rss <- exp(rss_data$linear_pred - reference_value)
-
-# Add jitter for visualization
-set.seed(123)
-rss_data$x_jitter <- as.numeric(factor(rss_data$crossing)) + 
-                   runif(nrow(rss_data), -0.1, 0.1)
-rss_data$y_jitter <- rss_data$rss + runif(nrow(rss_data), -0.02, 0.02)
-
-
-ggplot(rss_data, aes(x = x_jitter, y = y_jitter, shape = landuse, color = landuse)) +
-  geom_point(size = 3) +
-  scale_x_continuous(breaks = c(1, 2), labels = c("No", "Yes"), 
-                    name = "# of crossings") +
-  scale_y_continuous(name = "Relative Selection Strength") +
-  ggtitle("Relative Selection Strength by Landuse Type and Local Road Crossing") +
-  theme_minimal() +
-  theme(
-    legend.title = element_text(face = "bold"),
-    axis.title = element_text(face = "bold"),
-    plot.title = element_text(face = "bold", size = 12)
-  )
-
-
-
-
-```
-
-
-
-
 ```{r CI probabilities}
 
-# Simplified visualization code for moose habitat selection models
-
-# 1. Function for basic model with no interactions
+# basic model with no interactions
 calculate_basic_ci <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters - calculate directly
+  # scaling parameters - calculate directly
   var_center <- attr(data[[road_var]], "scaled:center")
   var_scale <- attr(data[[road_var]], "scaled:scale")
   
-  # Extract coefficients and variance
+  # coefficients and variance
   coefs <- fixef(model)$cond
   vcov_matrix <- vcov(model)$cond
   
-  # Find the coefficient
   effect <- coefs[road_var]
   effect_se <- sqrt(diag(vcov_matrix)[road_var])
   
-  # Create distance sequence
+  # distance sequence
   dist_seq <- seq(0, max_dist, length.out = 100)
   scaled_seq <- (dist_seq - var_center) / var_scale
   
-  # Calculate linear predictor and CI
+  # linear predictor and CI
   linear_pred <- scaled_seq * effect
   linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
   linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
   
-  # Calculate RSS and probability
+  # RSS and probability
   rss <- exp(linear_pred)
   rss_lower <- exp(linear_ci_lower)
   rss_upper <- exp(linear_ci_upper)
@@ -3524,7 +3137,7 @@ calculate_basic_ci <- function(model, data, road_var, max_dist = 2000) {
   prob_lower <- rss_lower / (rss_lower + 10)
   prob_upper <- rss_upper / (rss_upper + 10)
   
-  # Store results
+  # results
   results <- data.frame(
     distance = dist_seq,
     probability = prob,
@@ -3535,48 +3148,42 @@ calculate_basic_ci <- function(model, data, road_var, max_dist = 2000) {
   return(results)
 }
 
-# 2. Function for time of day models
+#time of day models
 calculate_time_ci <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters - calculate directly
   var_center <- attr(data[[road_var]], "scaled:center")
   var_scale <- attr(data[[road_var]], "scaled:scale")
   
-  # Extract coefficients and variance-covariance matrix
   coefs <- fixef(model)$cond
   vcov_matrix <- vcov(model)$cond
   
-  # Create distance sequence
   dist_seq <- seq(0, max_dist, length.out = 100)
   scaled_seq <- (dist_seq - var_center) / var_scale
   
-  # For each time category
   time_cats <- c("Day", "Night", "Twilight")
   all_predictions <- data.frame()
   
   for (time_cat in time_cats) {
-    # Calculate effect and SE for this time category
     if (time_cat == "Day") {
       effect <- coefs[road_var]
       effect_se <- sqrt(diag(vcov_matrix)[road_var])
     } else {
-      # The interaction term uses time_category (not factor(time_category))
+      #interaction term uses time_category (not factor(time_category))
       interaction_name <- paste0(road_var, ":time_category", time_cat)
       
       effect <- coefs[road_var] + coefs[interaction_name]
       
-      # Calculate standard error for combined effect
+      # standard error for combined effect
       main_se <- sqrt(diag(vcov_matrix)[road_var])
       int_se <- sqrt(diag(vcov_matrix)[interaction_name])
       covar <- vcov_matrix[road_var, interaction_name]
       effect_se <- sqrt(main_se^2 + int_se^2 + 2*covar)
     }
     
-    # Calculate linear predictor, selection strength, and probability
+    # linear predictor, selection strength, and probability
     linear_pred <- scaled_seq * effect
     linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
     linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
     
-    # Calculate RSS and probability
     rss <- exp(linear_pred)
     rss_lower <- exp(linear_ci_lower)
     rss_upper <- exp(linear_ci_upper)
@@ -3585,7 +3192,7 @@ calculate_time_ci <- function(model, data, road_var, max_dist = 2000) {
     prob_lower <- rss_lower / (rss_lower + 10)
     prob_upper <- rss_upper / (rss_upper + 10)
     
-    # Store results
+    # results
     time_results <- data.frame(
       distance = dist_seq,
       probability = prob,
@@ -3601,50 +3208,39 @@ calculate_time_ci <- function(model, data, road_var, max_dist = 2000) {
   return(all_predictions)
 }
 
-# 3. Function for seasonal models
+# seasonal models
 calculate_season_ci <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters - calculate directly
   var_center <- attr(data[[road_var]], "scaled:center")
   var_scale <- attr(data[[road_var]], "scaled:scale")
   
-  # Extract coefficients and variance-covariance matrix
   coefs <- fixef(model)$cond
   vcov_matrix <- vcov(model)$cond
   
-  # Create distance sequence
   dist_seq <- seq(0, max_dist, length.out = 100)
   scaled_seq <- (dist_seq - var_center) / var_scale
   
-  # Define season categories
   season_cats <- levels(data$season)
   all_predictions <- data.frame()
   
-  # For each season
   for (season_cat in season_cats) {
-    # Calculate effect and SE for this season
     if (season_cat == "Winter") {  # Winter is the reference level
       effect <- coefs[road_var]
       effect_se <- sqrt(diag(vcov_matrix)[road_var])
     } else {
-      # Get the interaction term
       interaction_name <- paste0(road_var, ":season", season_cat)
       
-      # Calculate the combined effect
       effect <- coefs[road_var] + coefs[interaction_name]
       
-      # Calculate standard error for combined effect
       main_se <- sqrt(diag(vcov_matrix)[road_var])
       int_se <- sqrt(diag(vcov_matrix)[interaction_name])
       covar <- vcov_matrix[road_var, interaction_name]
       effect_se <- sqrt(main_se^2 + int_se^2 + 2*covar)
     }
     
-    # Calculate linear predictor and CIs
     linear_pred <- scaled_seq * effect
     linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
     linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
     
-    # Calculate RSS and probability
     rss <- exp(linear_pred)
     rss_lower <- exp(linear_ci_lower)
     rss_upper <- exp(linear_ci_upper)
@@ -3653,7 +3249,6 @@ calculate_season_ci <- function(model, data, road_var, max_dist = 2000) {
     prob_lower <- rss_lower / (rss_lower + 10)
     prob_upper <- rss_upper / (rss_upper + 10)
     
-    # Store results
     season_results <- data.frame(
       distance = dist_seq,
       probability = prob,
@@ -3668,59 +3263,46 @@ calculate_season_ci <- function(model, data, road_var, max_dist = 2000) {
   return(all_predictions)
 }
 
-# 4. Function for landuse interaction models
+#landuse interaction models
 calculate_landuse_ci <- function(model, data, road_var, max_dist = 2000) {
-  # Get scaling parameters - calculate directly
   var_center <- attr(data[[road_var]], "scaled:center")
   var_scale <- attr(data[[road_var]], "scaled:scale")
   
-  # Extract coefficients and variance-covariance matrix
   coefs <- fixef(model)$cond
   vcov_matrix <- vcov(model)$cond
   
-  # Create distance sequence
   dist_seq <- seq(0, max_dist, length.out = 100)
   scaled_seq <- (dist_seq - var_center) / var_scale
   
-  # Define landuse categories (using actual factor levels)
   landuse_cats <- levels(data$landuse_factor)
   all_predictions <- data.frame()
   
-  # Coniferous is always the reference level
   ref_level <- "Coniferous" 
   
-  # For each landuse category
   for (landuse_cat in landuse_cats) {
-    # Calculate effect and SE for this landuse type
     if (landuse_cat == ref_level) {
       effect <- coefs[road_var]
       effect_se <- sqrt(diag(vcov_matrix)[road_var])
     } else {
-      # Get the correct interaction term name
       interaction_name <- paste0(road_var, ":landuse_factor", landuse_cat)
       
-      # Calculate the combined effect (if interaction exists)
       if (interaction_name %in% names(coefs)) {
         effect <- coefs[road_var] + coefs[interaction_name]
         
-        # Calculate standard error for combined effect
         main_se <- sqrt(diag(vcov_matrix)[road_var])
         int_se <- sqrt(diag(vcov_matrix)[interaction_name])
         covar <- vcov_matrix[road_var, interaction_name]
         effect_se <- sqrt(main_se^2 + int_se^2 + 2*covar)
       } else {
-        # If no interaction, use base effect
         effect <- coefs[road_var]
         effect_se <- sqrt(diag(vcov_matrix)[road_var])
       }
     }
     
-    # Calculate linear predictor and CIs
     linear_pred <- scaled_seq * effect
     linear_ci_lower <- linear_pred - 1.96 * effect_se * abs(scaled_seq)
     linear_ci_upper <- linear_pred + 1.96 * effect_se * abs(scaled_seq)
     
-    # Calculate RSS and probability
     rss <- exp(linear_pred)
     rss_lower <- exp(linear_ci_lower)
     rss_upper <- exp(linear_ci_upper)
@@ -3729,7 +3311,6 @@ calculate_landuse_ci <- function(model, data, road_var, max_dist = 2000) {
     prob_lower <- rss_lower / (rss_lower + 10)
     prob_upper <- rss_upper / (rss_upper + 10)
     
-    # Store results
     landuse_results <- data.frame(
       distance = dist_seq,
       probability = prob,
@@ -3744,9 +3325,7 @@ calculate_landuse_ci <- function(model, data, road_var, max_dist = 2000) {
   return(all_predictions)
 }
 
-# Plotting functions - unchanged from original
-
-# Plot function for basic model
+# basic model
 plot_basic <- function(predictions, road_var = "state_d") {
   road_label <- ifelse(grepl("state", road_var), "state roads", "local roads")
   
@@ -3766,7 +3345,7 @@ plot_basic <- function(predictions, road_var = "state_d") {
 }
 
 
-# Plot function for time of day
+# time of day
 plot_time_facet <- function(predictions, road_type = "state") {
   road_label <- ifelse(grepl("state", road_type), "state roads", "local roads")
   time_colors <- c("Day" = "#FFC145", "Night" = "#2B3A67", "Twilight" = "#B8B8D1")
@@ -3791,7 +3370,7 @@ plot_time_facet <- function(predictions, road_type = "state") {
     scale_fill_manual(values = time_colors)
 }
 
-# Plot function for seasonal model
+#seasonal model
 plot_season_facet <- function(predictions, road_var = "state_d") {
   road_label <- ifelse(grepl("state", road_var), "state roads", "local roads")
   season_colors <- c("Winter" = "#8FBCE6", "Spring" = "#EBA0C6", "Summer" = "#80CFA9")
@@ -3816,11 +3395,10 @@ plot_season_facet <- function(predictions, road_var = "state_d") {
     scale_fill_manual(values = season_colors)
 }
 
-# Plot function for landuse model
+#landuse model
 plot_landuse_facet <- function(predictions, road_var = "state_d") {
   road_label <- ifelse(grepl("state", road_var), "state roads", "local roads")
   
-  # Define colors for different landuse types
   landuse_colors <- c(
     "Coniferous" = "#00A600",
     "Mixed" = "#4DFF00",
@@ -3850,10 +3428,6 @@ plot_landuse_facet <- function(predictions, road_var = "state_d") {
     scale_fill_manual(values = landuse_colors)
 }
 
-# Example usage for each model type:
-
-
-# 1. Time of Day effect
 state_time_preds <- calculate_time_ci(model_glmm3_3.0.2, steps3, "s_state_d")
 state_time_plot <- plot_time_facet(state_time_preds, "state")
 print(state_time_plot)
@@ -3879,7 +3453,6 @@ print(local_season_plot)
 
 ggsave("local_season_probability.png", width = 10, height = 5, bg = "white", device = png)
 
-# 3. Landuse interaction
 state_landuse_preds <- calculate_landuse_ci(model_glmm_state.2, steps3, "s_state_d")
 state_landuse_plot <- plot_landuse_facet(state_landuse_preds, "state_d")
 print(state_landuse_plot)
@@ -3892,7 +3465,6 @@ print(local_landuse_plot)
 
 ggsave("local_landuse_probability.png", width = 10, height = 5, bg = "white", device = png)
 
-# 4. Basic road effect
 state_basic_preds <- calculate_basic_ci(model_glmm1.1.1, steps3, "s_state_d")
 state_basic_plot <- plot_basic(state_basic_preds, "state_d")
 print(state_basic_plot)
@@ -3913,85 +3485,23 @@ ggsave("local_basic_probability.png", width = 6, height = 4, bg = "white", devic
 
 ```{r numbers for thesis}
 
-find_rss_threshold_distance <- function(model, data, road_var, threshold = 2.0, time_category = NULL, landuse = NULL, max_search_dist = 4000) {
-  # Get scaling parameters
-  var_center <- attr(data[[road_var]], "scaled:center")
-  var_scale <- attr(data[[road_var]], "scaled:scale")
-  
-  # Extract coefficients
-  coefs <- fixef(model)$cond
-  
-  # Function to calculate RSS at a given distance
-  calculate_rss <- function(dist) {
-    scaled_dist <- (dist - var_center) / var_scale
-    
-    # Base effect
-    effect <- coefs[road_var]
-    
-    # Add time of day interaction if specified
-    if (!is.null(time_category) && time_category != "Day") {
-      interaction_name <- paste0(road_var, ":time_category", time_category)
-      if (interaction_name %in% names(coefs)) {
-        effect <- effect + coefs[interaction_name]
-      }
-    }
-    
-    # Add landuse interaction if specified
-    if (!is.null(landuse) && landuse != "Coniferous") {
-      interaction_name <- paste0(road_var, ":landuse_factor", landuse)
-      if (interaction_name %in% names(coefs)) {
-        effect <- effect + coefs[interaction_name]
-      }
-    }
-    
-    # Calculate RSS for this distance vs. zero distance
-    scaled_zero <- (0 - var_center) / var_scale
-    rss <- exp(effect * (scaled_dist - scaled_zero))
-    
-    return(rss - threshold) # Return difference from threshold for root-finding
-  }
-  
-  # Use root-finding to locate the distance where RSS = threshold
-  # Starting from 1 to avoid potential issues at distance = 0
-  result <- try(uniroot(calculate_rss, c(1, max_search_dist)))
-  
-  if (class(result) == "try-error") {
-    # Threshold might not be reached within range
-    return(NA)
-  } else {
-    return(result$root)
-  }
-}
-
-
-
-find_rss_threshold_distance(model_glmm3_3.0.2, steps3, "s_state_d", threshold = 2.0, time_category = "Day")
-# > find_rss_threshold_distance(model_glmm3_3.0.2, steps3, "s_state_d", threshold = 2.0, time_category = "Day")
-# [1] 3176.482
-# > find_rss_threshold_distance(model_glmm3_3.0.2, steps3, "s_local_d", threshold = 2.0)
-# [1] 1174.474
-find_rss_threshold_distance(model_glmm1.1.1, steps3, "s_state_d", threshold = 2.0)
-# [1] 2036.214
-find_rss_threshold_distance(model_glmm1.1.1, steps3, "s_local_d", threshold = 2.0)
-# [1] 2542.993
-
 calculate_exact_rss <- function(model, data, road_var, distance, ref_distance = 0, 
                                time_category = NULL, landuse = NULL) {
-  # Get scaling parameters
+  # scaling parameters
   var_center <- attr(data[[road_var]], "scaled:center")
   var_scale <- attr(data[[road_var]], "scaled:scale")
   
-  # Calculate scaled distances
+  # scaled distances
   scaled_dist <- (distance - var_center) / var_scale
   scaled_ref <- (ref_distance - var_center) / var_scale
   
-  # Extract coefficients
+  # coefficients
   coefs <- fixef(model)$cond
   
-  # Base effect
+  # base
   effect <- coefs[road_var]
   
-  # Add time of day interaction if specified
+  # time of day interaction
   if (!is.null(time_category) && time_category != "Day") {
     interaction_name <- paste0(road_var, ":time_category", time_category)
     if (interaction_name %in% names(coefs)) {
@@ -3999,7 +3509,7 @@ calculate_exact_rss <- function(model, data, road_var, distance, ref_distance = 
     }
   }
   
-  # Add landuse interaction if specified
+  #  landuse interaction
   if (!is.null(landuse) && landuse != "Coniferous") {
     interaction_name <- paste0(road_var, ":landuse_factor", landuse)
     if (interaction_name %in% names(coefs)) {
@@ -4007,7 +3517,7 @@ calculate_exact_rss <- function(model, data, road_var, distance, ref_distance = 
     }
   }
   
-    # Add season interaction if specified
+    #  season interaction
   if (!is.null(season) && season != "Winter") {
     interaction_name <- paste0(road_var, ":season", season)
     if (interaction_name %in% names(coefs)) {
@@ -4015,7 +3525,7 @@ calculate_exact_rss <- function(model, data, road_var, distance, ref_distance = 
     }
   }
   
-  # Calculate RSS between the two distances
+  # RSS between the two distances
   rss <- exp(effect * (scaled_dist - scaled_ref))
   
   return(rss)
